@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import FurnishRoom from "./components/FurnishRoom";
 import Upload from "./components/Upload";
 import StyleSelector from "./components/StyleSelector";
 import ResultView from "./components/ResultView";
@@ -724,6 +725,7 @@ function AppInner() {
                 <p>Select a design aesthetic to transform your room</p>
               </div>
               <StyleSelector uploadedImage={uploadedImage} onGenerate={handleGenerate} />
+              <FurnishRoom uploadedImage={uploadedImage} onFurnish={handleFurnish}/>
             </motion.div>
           )}
 
