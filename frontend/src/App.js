@@ -332,6 +332,67 @@ function AppInner() {
     }
   };
 
+  const handleFurnish = async (prompt) => {
+    setLoading(true);
+    setLoadingStep(0);
+    setLoadingProgress(0);
+  
+    try {
+      setLoadingStep(1);
+      setLoadingProgress(20);
+  
+      const res = await fetch(`${apiUrl}/furnish-room`, {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          image: uploadedImage,
+          prompt: prompt,
+        }),
+      });
+  
+      setLoadingStep(2);
+      setLoadingProgress(70);
+  
+      const contentType = res.headers.get("content-type") || "";
+  
+      if (!res.ok || !contentType.includes("application/json")) {
+        toast(
+          "Furnish failed — check backend connection.",
+          "error",
+          6000
+        );
+        return;
+      }
+  
+      const data = await res.json();
+  
+      if (data.image) {
+        const imgSrc = "data:image/jpeg;base64," + data.image;
+  
+        setGeneratedImage(imgSrc);
+        setSelectedStyle("furnished");
+        setStep("result");
+  
+        toast(
+          "Room furnished successfully!",
+          "success"
+        );
+      } else {
+        toast(data.error || "Furnish failed", "error");
+      }
+  
+    } catch (err) {
+      toast(
+        "Furnish failed — check backend connection.",
+        "error"
+      );
+    } finally {
+      setLoading(false);
+      setLoadingStep(0);
+      setLoadingProgress(0);
+    }
+  };
+  
   const handleUndo = () => {
     if (previousImage) {
       setGeneratedImage(previousImage);
