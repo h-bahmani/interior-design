@@ -104,7 +104,7 @@ const buildPrompt = () => {
 
   const handleGenerate = () => {
     if (!roomType || selectedItems.length === 0) return;
-    onGenerate("custom", null, null, buildPrompt());
+    onFurnish(buildPrompt());
   };
 
   const canGenerate = roomType && selectedItems.length > 0;
