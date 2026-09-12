@@ -1,0 +1,311 @@
+.bsetup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(8, 8, 16, 0.9);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.bsetup-modal {
+  background: linear-gradient(145deg, #13131f, #1a1a2e);
+  border: 1px solid rgba(201, 168, 76, 0.22);
+  border-radius: 20px;
+  padding: 36px 32px 28px;
+  width: 100%;
+  max-width: 460px;
+  box-shadow:
+    0 0 0 1px rgba(201, 168, 76, 0.07),
+    0 24px 64px rgba(0, 0, 0, 0.65),
+    0 0 80px rgba(201, 168, 76, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.bsetup-icon {
+  font-size: 2.2rem;
+  color: #c9a84c;
+  margin-bottom: 10px;
+  text-shadow: 0 0 24px rgba(201, 168, 76, 0.5);
+}
+
+.bsetup-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: #f0e8d8;
+  margin: 0 0 20px;
+  letter-spacing: -0.02em;
+}
+
+/* ── Mode toggle ─────────────────────────────────────────── */
+
+.bsetup-modes {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.bsetup-mode-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.18s;
+  color: #555;
+}
+
+.bsetup-mode-btn:hover {
+  background: rgba(201, 168, 76, 0.06);
+  border-color: rgba(201, 168, 76, 0.18);
+  color: #888;
+}
+
+.bsetup-mode-btn.active {
+  background: rgba(201, 168, 76, 0.1);
+  border-color: rgba(201, 168, 76, 0.45);
+  color: #c9a84c;
+}
+
+.bsetup-mode-icon {
+  font-size: 1.3rem;
+}
+
+.bsetup-mode-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* ── Description ─────────────────────────────────────────── */
+
+.bsetup-desc {
+  font-size: 0.84rem;
+  color: #666;
+  text-align: center;
+  margin: 0 0 14px;
+}
+
+/* ── Colab steps ─────────────────────────────────────────── */
+
+.bsetup-steps {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.bsetup-auto-badge {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(201, 168, 76, 0.08);
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.8rem;
+  color: #a89060;
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.bsetup-auto-badge strong {
+  color: #c9a84c;
+}
+
+.bsetup-auto-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.bsetup-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: #888;
+  line-height: 1.4;
+}
+
+.bsetup-step strong {
+  color: #c9a84c;
+}
+
+.bsetup-step-n {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  background: rgba(201, 168, 76, 0.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #c9a84c;
+}
+
+/* ── URL input ───────────────────────────────────────────── */
+
+.bsetup-input-wrap {
+  width: 100%;
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.bsetup-input {
+  width: 100%;
+  padding: 12px 44px 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #f0e8d8;
+  font-size: 0.9rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.bsetup-input:focus {
+  border-color: rgba(201, 168, 76, 0.5);
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.1);
+}
+
+.bsetup-input::placeholder {
+  color: #444;
+  font-style: italic;
+}
+
+.bsetup-input-error {
+  border-color: rgba(255, 80, 80, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(255, 80, 80, 0.1) !important;
+}
+
+.bsetup-input-ok {
+  border-color: rgba(72, 199, 142, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(72, 199, 142, 0.1) !important;
+}
+
+.bsetup-check {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #48c78e;
+  font-size: 1.1rem;
+}
+
+.bsetup-error {
+  width: 100%;
+  font-size: 0.79rem;
+  color: #ff6b6b;
+  margin: 0 0 10px;
+  text-align: left;
+  line-height: 1.5;
+}
+
+/* ── Actions ─────────────────────────────────────────────── */
+
+.bsetup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.bsetup-btn-connect {
+  width: 100%;
+  padding: 13px;
+  background: linear-gradient(135deg, #c9a84c, #a67c30);
+  border: none;
+  border-radius: 10px;
+  color: #0a0a0f;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+}
+
+.bsetup-btn-connect:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(201, 168, 76, 0.35);
+}
+
+.bsetup-btn-connect:disabled {
+  opacity: 0.75;
+  cursor: default;
+  transform: none;
+}
+
+.bsetup-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(10, 10, 15, 0.3);
+  border-top-color: #0a0a0f;
+  border-radius: 50%;
+  animation: bsetup-spin 0.7s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes bsetup-spin {
+  to { transform: rotate(360deg); }
+}
+
+.bsetup-btn-skip {
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  color: #444;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.bsetup-btn-skip:hover {
+  border-color: rgba(255, 255, 255, 0.13);
+  color: #666;
+}
+
+/* ── Mobile ──────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .bsetup-modal {
+    padding: 28px 18px 22px;
+    border-radius: 16px;
+  }
+
+  .bsetup-title {
+    font-size: 1.25rem;
+  }
+
+  .bsetup-input {
+    font-size: 0.82rem;
+  }
+}

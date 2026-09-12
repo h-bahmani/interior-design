@@ -1,0 +1,385 @@
+.result-container {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+/* Slider Wrap */
+.result-slider-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.result-labels {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 4px;
+}
+
+.result-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Zoom Trigger Button */
+.zoom-trigger-btn {
+  position: absolute;
+  bottom: 48px;
+  right: 12px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  padding: 7px 14px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s;
+  z-index: 10;
+}
+
+.zoom-trigger-btn:hover {
+  background: rgba(201, 168, 76, 0.3);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+/* Action Buttons */
+.result-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.result-btn {
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.3s;
+  border: 1px solid transparent;
+}
+
+.result-btn.primary {
+  background: var(--gold);
+  color: var(--bg);
+  border-color: var(--gold);
+}
+
+.result-btn.primary:hover {
+  background: var(--gold-light, #d4b86a);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(201, 168, 76, 0.3);
+}
+
+.result-btn.secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.result-btn.secondary:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  transform: translateY(-2px);
+}
+
+/* Scroll Hint */
+.result-scroll-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+
+/* Zoom Overlay */
+.zoom-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.95);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-modal {
+  width: 95vw;
+  height: 95vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Zoom Toolbar */
+.zoom-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+  flex-shrink: 0;
+}
+
+.zoom-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+  letter-spacing: 0.05em;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zoom-ctrl-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 30px;
+  height: 30px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.zoom-ctrl-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.zoom-level {
+  font-size: 12px;
+  color: var(--gold);
+  font-family: monospace;
+  min-width: 40px;
+  text-align: center;
+}
+
+.zoom-close-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-left: 8px;
+}
+
+.zoom-close-btn:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+/* Zoom Canvas */
+.zoom-canvas {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0a;
+}
+
+.zoom-img {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  user-select: none;
+  border-radius: 4px;
+}
+
+/* Zoom Footer */
+.zoom-footer {
+  padding: 10px 20px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.result-btn.undo {
+  background: transparent;
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.result-btn.undo:hover {
+  background: rgba(224, 92, 92, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Share Panel */
+.share-panel {
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.share-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.share-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-option-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  width: 100%;
+}
+
+.share-option-btn:hover {
+  border-color: var(--gold);
+  background: rgba(201, 168, 76, 0.05);
+}
+
+.share-option-icon {
+  font-size: 18px;
+  color: var(--gold);
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.share-option-name {
+  display: block;
+  font-size: 13px;
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  margin-bottom: 2px;
+}
+
+.share-option-desc {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ─── Mobile ─────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .result-container {
+    max-width: 100%;
+    gap: 16px;
+  }
+
+  /* Compare slider: shorter on mobile */
+  .result-slider-wrap :global([data-rcs-handle-container]),
+  .result-slider-wrap > div {
+    height: 280px !important;
+  }
+
+  /* Action buttons: 2-column grid on mobile */
+  .result-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .result-btn {
+    padding: 13px 12px;
+    font-size: 12px;
+    text-align: center;
+    justify-content: center;
+  }
+
+  /* Primary button spans full width */
+  .result-btn.primary {
+    grid-column: 1 / -1;
+    padding: 15px;
+    font-size: 14px;
+  }
+
+  /* Undo button spans full width */
+  .result-btn.undo { grid-column: 1 / -1; }
+
+  /* Scroll hint */
+  .result-scroll-hint { font-size: 11px; text-align: center; }
+
+  /* Share panel: full width */
+  .share-panel { max-width: 100%; }
+
+  /* Zoom modal: true full-screen on mobile */
+  .zoom-modal {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+    border: none;
+  }
+
+  /* Zoom toolbar: smaller on mobile */
+  .zoom-toolbar { padding: 10px 14px; }
+  .zoom-title { font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .zoom-ctrl-btn { width: 36px; height: 36px; font-size: 18px; }
+  .zoom-close-btn { width: 36px; height: 36px; }
+
+  /* Zoom footer: hide on small screens to save space */
+  .zoom-footer { display: none; }
+
+  /* Zoom trigger button: larger touch target */
+  .zoom-trigger-btn { padding: 10px 16px; font-size: 12px; bottom: 44px; }
+}
+
+@media (max-width: 480px) {
+  /* Action buttons: stack full-width on very small screens */
+  .result-actions { grid-template-columns: 1fr; }
+  .result-btn.primary { grid-column: 1; }
+  .result-btn.undo { grid-column: 1; }
+
+  .result-btn { padding: 14px 16px; font-size: 13px; }
+
+  /* Share options: larger touch targets */
+  .share-option-btn { padding: 14px 16px; }
+}
