@@ -327,6 +327,17 @@ def edit_object():
 
     return jsonify({"error": "No AI backend connected. Start Colab or set REPLICATE_API_TOKEN."}), 503
 
+@app.route("/furnish-room", methods=["POST"])
+def furnish_room():
+    data = request.json or {}
+    image_b64 = data.get("image")
+    prompt = data.get("prompt")
+    if not image_b64 or not prompt:
+        return jsonify({"error": "image and prompt required"}), 400
+    if COLAB_URL["url"]:
+        resp = requests.post(f"{COLAB_URL['url']}/colab-furnish",json={"image": image_b64,"prompt": prompt},headers=COLAB_HEADERS,timeout=180,)
+        return jsonify(resp.json())
+    return jsonify({"error": "Colab not connected"}), 503
 
 @app.route("/preview-styles", methods=["POST"])
 def preview_styles():
