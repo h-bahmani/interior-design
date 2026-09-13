@@ -44,12 +44,6 @@ export default function ResultView({ original, generated, style, onReset, onNewS
     return () => canvas.removeEventListener("wheel", handleWheel);
   }, [zoomOpen]);
 
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoomScale(prev => Math.min(Math.max(prev * delta, 1), 5));
-  };
-
   const handleMouseDown = (e) => {
     if (zoomScale <= 1) return;
     setIsDragging(true);

@@ -7,26 +7,26 @@ const MODES = [
     id: "colab",
     icon: "⚡",
     label: "Google Colab",
-    desc: "Paste your ngrok URL from Colab",
-    placeholder: "https://xxxx-xxxx.ngrok-free.app",
-    defaultVal: "",
+    desc: "Register your running Colab notebook with the local backend",
   },
   {
     id: "local",
     icon: "💻",
     label: "Local Dev",
-    desc: "Running Flask on your machine",
-    placeholder: "http://localhost:5000",
-    defaultVal: "http://localhost:5000",
+    desc: "Running Flask on your machine (Replicate or no AI backend)",
   },
 ];
 
-export default function BackendSetup({ onConnect }) {
-  const saved = localStorage.getItem("interiorai_api_url") || "";
-  const guessMode = saved.includes("localhost") ? "local" : "colab";
+const DEFAULT_LOCAL_URL = "http://localhost:5000";
 
-  const [mode, setMode] = useState(guessMode);
-  const [url, setUrl] = useState(saved);
+export default function BackendSetup({ onConnect }) {
+  const saved = localStorage.getItem("interiorai_api_url") || DEFAULT_LOCAL_URL;
+  const savedColab = localStorage.getItem("interiorai_colab_url") || "";
+
+  const [mode, setMode] = useState(savedColab ? "colab" : "local");
+  const [localUrl, setLocalUrl] = useState(saved);
+  const [colabUrl, setColabUrl] = useState(savedColab);
+  const [connectionKey, setConnectionKey] = useState("");
   const [status, setStatus] = useState("idle"); // idle | testing | ok | error
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -34,34 +34,52 @@ export default function BackendSetup({ onConnect }) {
 
   const handleModeSwitch = (m) => {
     setMode(m.id);
-    setUrl(m.defaultVal);
     setStatus("idle");
     setErrorMsg("");
   };
 
   const handleConnect = async () => {
-    const clean = url.trim().replace(/\/$/, "");
-    if (!clean) {
-      setErrorMsg("Please enter a URL first.");
-      return;
-    }
-    if (!clean.startsWith("http")) {
+    const cleanLocal = (localUrl.trim() || DEFAULT_LOCAL_URL).replace(/\/$/, "");
+    if (!cleanLocal.startsWith("http")) {
       setStatus("error");
-      setErrorMsg("URL must start with http:// or https://");
+      setErrorMsg("Local backend URL must start with http:// or https://");
       return;
     }
+
+    const cleanColab = colabUrl.trim().replace(/\/$/, "");
+    if (mode === "colab" && !cleanColab) {
+      setStatus("error");
+      setErrorMsg("Paste the ngrok URL printed by the Colab notebook.");
+      return;
+    }
+
     setStatus("testing");
     setErrorMsg("");
     try {
-      const res = await fetch(`${clean}/health`, {
+      if (mode === "colab") {
+        const setRes = await fetch(`${cleanLocal}/set-colab-url`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: cleanColab, connection_key: connectionKey.trim() }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!setRes.ok) {
+          throw new Error("register-failed");
+        }
+      }
+
+      const res = await fetch(`${cleanLocal}/health`, {
         signal: AbortSignal.timeout(8000),
         headers: { "ngrok-skip-browser-warning": "true" },
       });
       const data = await res.json();
       if (data.status === "ok" || data.colab_connected !== undefined) {
-        localStorage.setItem("interiorai_api_url", clean);
+        localStorage.setItem("interiorai_api_url", cleanLocal);
+        if (mode === "colab") {
+          localStorage.setItem("interiorai_colab_url", cleanColab);
+        }
         setStatus("ok");
-        setTimeout(() => onConnect(clean, data), 700);
+        setTimeout(() => onConnect(cleanLocal, data), 700);
       } else {
         throw new Error("Unexpected response");
       }
@@ -69,14 +87,14 @@ export default function BackendSetup({ onConnect }) {
       setStatus("error");
       setErrorMsg(
         mode === "colab"
-          ? "Could not reach Colab. Make sure all cells are running and the URL is correct."
+          ? "Could not reach the local Flask backend, or it could not reach Colab. Make sure `python app.py` is running locally and all Colab cells finished."
           : "Could not reach local Flask. Run: python app.py in the backend folder."
       );
     }
   };
 
   const handleSkip = () => {
-    const clean = url.trim().replace(/\/$/, "") || "http://localhost:5000";
+    const clean = localUrl.trim().replace(/\/$/, "") || DEFAULT_LOCAL_URL;
     localStorage.setItem("interiorai_api_url", clean);
     onConnect(clean, null);
   };
@@ -124,28 +142,58 @@ export default function BackendSetup({ onConnect }) {
             >
               <div className="bsetup-auto-badge">
                 <span className="bsetup-auto-icon">⚡</span>
-                If the owner has Colab running, this page <strong>auto-connects</strong> — just wait a moment.
+                The Colab notebook prints a <strong>BACKEND_URL</strong> and a <strong>CONNECTION_KEY</strong> in its last cell.
               </div>
-              <div className="bsetup-step"><span className="bsetup-step-n">1</span>Run all cells in your Colab notebook</div>
-              <div className="bsetup-step"><span className="bsetup-step-n">2</span>The app connects automatically via Firebase</div>
-              <div className="bsetup-step"><span className="bsetup-step-n">3</span>Or paste the ngrok URL below to connect manually</div>
+              <div className="bsetup-step"><span className="bsetup-step-n">1</span>Run all cells in your Colab notebook (T4 GPU)</div>
+              <div className="bsetup-step"><span className="bsetup-step-n">2</span>Paste BACKEND_URL and CONNECTION_KEY below</div>
+              <div className="bsetup-step"><span className="bsetup-step-n">3</span>The local Flask backend (running on your machine) proxies requests to Colab</div>
             </motion.div>
           )}
 
-          {/* URL input */}
+          {/* Local backend URL — always required, this is what the app actually talks to */}
           <div className="bsetup-input-wrap">
+            <label className="bsetup-label">Local backend URL</label>
             <input
               className={`bsetup-input ${status === "error" ? "bsetup-input-error" : status === "ok" ? "bsetup-input-ok" : ""}`}
               type="url"
-              value={url}
-              onChange={e => { setUrl(e.target.value); setStatus("idle"); setErrorMsg(""); }}
+              value={localUrl}
+              onChange={e => { setLocalUrl(e.target.value); setStatus("idle"); setErrorMsg(""); }}
               onKeyDown={e => e.key === "Enter" && handleConnect()}
-              placeholder={selectedMode.placeholder}
+              placeholder={DEFAULT_LOCAL_URL}
               spellCheck={false}
-              autoFocus={mode === "colab"}
             />
             {status === "ok" && <span className="bsetup-check">✓</span>}
           </div>
+
+          {mode === "colab" && (
+            <>
+              <div className="bsetup-input-wrap">
+                <label className="bsetup-label">Colab BACKEND_URL (ngrok)</label>
+                <input
+                  className="bsetup-input"
+                  type="url"
+                  value={colabUrl}
+                  onChange={e => { setColabUrl(e.target.value); setStatus("idle"); setErrorMsg(""); }}
+                  onKeyDown={e => e.key === "Enter" && handleConnect()}
+                  placeholder="https://xxxx-xxxx.ngrok-free.app"
+                  spellCheck={false}
+                  autoFocus
+                />
+              </div>
+              <div className="bsetup-input-wrap">
+                <label className="bsetup-label">CONNECTION_KEY</label>
+                <input
+                  className="bsetup-input"
+                  type="text"
+                  value={connectionKey}
+                  onChange={e => { setConnectionKey(e.target.value); setStatus("idle"); setErrorMsg(""); }}
+                  onKeyDown={e => e.key === "Enter" && handleConnect()}
+                  placeholder="printed next to BACKEND_URL"
+                  spellCheck={false}
+                />
+              </div>
+            </>
+          )}
 
           {errorMsg && (
             <motion.p
