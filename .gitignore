@@ -18,3 +18,7 @@ Thumbs.db
 
 # Colab
 *.ipynb_checkpoints/
+
+# Local workarounds / scratch
+backend/.local-deps/
+backend/.parsed-notebook.json

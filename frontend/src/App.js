@@ -231,7 +231,11 @@ function AppInner() {
 
       const genContentType = res.headers.get("content-type") || "";
       if (!res.ok || !genContentType.includes("application/json")) {
-        toast("Generation failed on Colab — make sure all model cells ran successfully.", "error", 6000);
+        const failure = genContentType.includes("application/json") ? await res.json() : null;
+        const message = failure?.error === "No AI backend connected. Start Colab or set REPLICATE_API_TOKEN."
+          ? "Flask is running, but no AI notebook is connected. Connect your running notebook before generating."
+          : (typeof failure?.error === "string" ? failure.error : `Backend returned HTTP ${res.status} without a valid JSON response. Check the backend URL.`);
+        toast(message, "error", 10000);
         return;
       }
 

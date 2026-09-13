@@ -42,7 +42,8 @@ export default function StyleComparison({ original, currentImage, currentStyle }
 
       const contentType = res.headers.get("content-type") || "";
       if (!res.ok || !contentType.includes("application/json")) {
-        toast("Generation failed on Colab — make sure all model cells ran successfully.", "error", 6000);
+        const failure = contentType.includes("application/json") ? await res.json() : null;
+        toast(typeof failure?.error === "string" ? failure.error : `Backend returned HTTP ${res.status} without a valid JSON response. Check the backend URL.`, "error", 10000);
         return;
       }
 

@@ -177,6 +177,11 @@ def set_colab_url():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
     COLAB_URL["url"] = url.rstrip("/")
+    connection_key = data.get("connection_key", "").strip()
+    if connection_key:
+        COLAB_HEADERS["Authorization"] = "Bearer " + connection_key
+    else:
+        COLAB_HEADERS.pop("Authorization", None)
     print(f"✅ Colab URL set: {COLAB_URL['url']}")
     return jsonify({"message": "Colab URL registered", "url": COLAB_URL["url"]})
 

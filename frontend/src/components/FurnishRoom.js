@@ -61,7 +61,7 @@ const STYLE_PREFERENCES = [
   { id: "eclectic", name: "Eclectic", desc: "Mixed, unique, creative" },
 ];
 
-export default function FurnishRoom({ uploadedImage, onGenerate }) {
+export default function FurnishRoom({ uploadedImage, onFurnish }) {
   const [roomType, setRoomType] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
   const [stylePreference, setStylePreference] = useState(null);
