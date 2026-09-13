@@ -44,15 +44,17 @@ STYLE_PROMPTS = {
 
 REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "")
 
-# Replicate model — Stable Diffusion img2img (always available, reliable)
-# User can override via env var to use a different model version
+# Replicate model — SDXL supports img2img/inpaint via the `image`/`mask` inputs.
+# The old pinned stable-diffusion-img2img version (15a3689e) now returns
+# "422 Invalid version or not permitted" for new API tokens, so we default to
+# SDXL's current version instead. User can override via env var.
 REPLICATE_IMG2IMG_MODEL = os.environ.get(
     "REPLICATE_IMG2IMG_MODEL",
-    "stability-ai/stable-diffusion-img2img:15a3689ee13b0d2616e98820eca31d4af4a36b65a5a4aaf3ded1c69a29fb5e8",
+    "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc",
 )
 REPLICATE_INPAINT_MODEL = os.environ.get(
     "REPLICATE_INPAINT_MODEL",
-    "stability-ai/stable-diffusion-inpainting:95b7223104132402a9ae91cc677285bc5eb997834bd2349fa486f53910fd68b3",
+    "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc",
 )
 
 
