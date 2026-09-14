@@ -1,25 +1,23 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ColorPaletteSelector from "./ColorPaletteSelector";
-import FurnishRoom from "./FurnishRoom";
 import { getApiUrl, apiHeaders } from "../config";
 import { useToast } from "./Toast";
 import "./StyleSelector.css";
 
 const STYLES = [
-  { id: "minimalist", name: "Minimalist", desc: "Clean lines, white space, serene", emoji: "◻", color: "#e8e6df" },
-  { id: "industrial", name: "Industrial", desc: "Raw concrete, metal, exposed brick", emoji: "⬡", color: "#8a7a6a" },
-  { id: "cyberpunk", name: "Cyberpunk", desc: "Neon lights, RGB, sci-fi future", emoji: "◈", color: "#4fc3f7" },
-  { id: "modern_luxury", name: "Modern Luxury", desc: "Marble, gold accents, velvet", emoji: "◇", color: "#c9a84c" },
-  { id: "scandinavian", name: "Scandinavian", desc: "Hygge warmth, natural wood, cozy", emoji: "❋", color: "#a8b89a" },
-  { id: "midcentury_modern", name: "Mid-Century", desc: "Retro 1960s, teak, geometric", emoji: "◑", color: "#c4774a" },
-  { id: "japanese_zen", name: "Japanese Zen", desc: "Wabi-sabi, tatami, bamboo peace", emoji: "⬤", color: "#8aa88e" },
-  { id: "bohemian", name: "Bohemian", desc: "Colorful textiles, eclectic, vibrant", emoji: "✦", color: "#c47aad" },
+  { id: "minimalist", name: "Minimalist", desc: "Clean lines, white space, serene", emoji: "🤍", color: "#e8e6df" },
+  { id: "industrial", name: "Industrial", desc: "Raw concrete, metal, exposed brick", emoji: "⚙️", color: "#8a7a6a" },
+  { id: "cyberpunk", name: "Cyberpunk", desc: "Neon lights, RGB, sci-fi future", emoji: "🌃", color: "#4fc3f7" },
+  { id: "modern_luxury", name: "Modern Luxury", desc: "Marble, gold accents, velvet", emoji: "💎", color: "#c9a84c" },
+  { id: "scandinavian", name: "Scandinavian", desc: "Hygge warmth, natural wood, cozy", emoji: "🌿", color: "#a8b89a" },
+  { id: "midcentury_modern", name: "Mid-Century", desc: "Retro 1960s, teak, geometric", emoji: "🕰️", color: "#c4774a" },
+  { id: "japanese_zen", name: "Japanese Zen", desc: "Wabi-sabi, tatami, bamboo peace", emoji: "🎋", color: "#8aa88e" },
+  { id: "bohemian", name: "Bohemian", desc: "Colorful textiles, eclectic, vibrant", emoji: "🌸", color: "#c47aad" },
 ];
 
 export default function StyleSelector({ uploadedImage, onGenerate }) {
   const toast = useToast();
-  const [activeTab, setActiveTab] = useState("transform");
   const [selected, setSelected] = useState(null);
   const [previews, setPreviews] = useState({});
   const [loadingPreviews, setLoadingPreviews] = useState(false);
@@ -109,30 +107,7 @@ export default function StyleSelector({ uploadedImage, onGenerate }) {
 
   return (
     <div className="style-container">
-
-      {/* Tab Switcher */}
-      <div className="style-tabs">
-        <button
-          className={`style-tab ${activeTab === "transform" ? "active" : ""}`}
-          onClick={() => setActiveTab("transform")}
-        >
-          ◈ Transform Style
-        </button>
-        <button
-          className={`style-tab ${activeTab === "furnish" ? "active" : ""}`}
-          onClick={() => setActiveTab("furnish")}
-        >
-          ⬡ Furnish Room
-        </button>
-      </div>
-
-      {activeTab === "furnish" ? (
-        <FurnishRoom
-          uploadedImage={uploadedImage}
-          onGenerate={onGenerate}
-        />
-      ) : (
-        <>
+      <>
           {/* Uploaded Image Preview */}
           {uploadedImage && (
             <div className="style-preview-strip">
@@ -457,7 +432,6 @@ Example: cozy Japanese cafe with warm Edison lighting, wooden furniture, plants 
             )}
           </motion.div>
         </>
-      )}
     </div>
   );
 }
