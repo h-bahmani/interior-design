@@ -342,9 +342,49 @@ def furnish_room():
     if not image_b64 or not prompt:
         return jsonify({"error": "image and prompt required"}), 400
     if COLAB_URL["url"]:
-        resp = requests.post(f"{COLAB_URL['url']}/colab-furnish",json={"image": image_b64,"prompt": prompt},headers=COLAB_HEADERS,timeout=180,)
-        return jsonify(resp.json())
+        try:
+            resp = requests.post(
+                f"{COLAB_URL['url']}/colab-furnish",
+                json={"image": image_b64, "prompt": prompt},
+                headers=COLAB_HEADERS,
+                timeout=180,
+            )
+            result = resp.json()
+        except Exception as e:
+            return jsonify({"error": f"Colab request failed: {e}"}), 500
+
+        if "image" not in result:
+            return jsonify({"error": result.get("error", "Colab did not return an image"), "details": result}), 500
+
+        return jsonify(result)
     return jsonify({"error": "Colab not connected"}), 503
+
+
+@app.route("/add-object", methods=["POST"])
+def add_object():
+    data = request.json or {}
+    room_image = data.get("room_image")
+    object_image = data.get("object_image")
+    prompt = data.get("prompt", "")
+    if not room_image or not object_image:
+        return jsonify({"error": "room_image and object_image required"}), 400
+    if COLAB_URL["url"]:
+        try:
+            resp = requests.post(
+                f"{COLAB_URL['url']}/colab-add-object",
+                json={"room_image": room_image, "object_image": object_image, "prompt": prompt},
+                headers=COLAB_HEADERS,
+                timeout=180,
+            )
+            result = resp.json()
+        except Exception as e:
+            return jsonify({"error": f"Colab request failed: {e}"}), 500
+
+        if "image" not in result:
+            return jsonify({"error": result.get("error", "Colab did not return an image"), "details": result}), 500
+
+        return jsonify(result)
+    return jsonify({"error": "Colab not connected — this feature needs the Colab notebook (IP-Adapter runs on GPU)."}), 503
 
 @app.route("/preview-styles", methods=["POST"])
 def preview_styles():
