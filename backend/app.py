@@ -287,7 +287,10 @@ def generate():
                 f"{COLAB_URL['url']}/colab-generate",
                 json={"image": image_b64, "style": style, "palette": palette, "customPrompt": custom_prompt},
                 headers=COLAB_HEADERS,
-                timeout=120,
+                # SDXL with enable_sequential_cpu_offload() (traded for VRAM
+                # safety on the free T4) is much slower than SD1.5 was — a
+                # single generation can take several minutes.
+                timeout=300,
             )
             result = resp.json()
         except Exception as e:
@@ -381,7 +384,7 @@ def edit_object():
                 f"{COLAB_URL['url']}/colab-edit",
                 json={"image": image_b64, "object": object_label, "prompt": edit_prompt},
                 headers=COLAB_HEADERS,
-                timeout=120,
+                timeout=300,
             )
             result = resp.json()
         except Exception as e:
@@ -420,7 +423,7 @@ def furnish_room():
                 f"{COLAB_URL['url']}/colab-furnish",
                 json={"image": image_b64, "prompt": prompt},
                 headers=COLAB_HEADERS,
-                timeout=180,
+                timeout=300,
             )
             result = resp.json()
         except Exception as e:
@@ -447,7 +450,7 @@ def add_object():
                 f"{COLAB_URL['url']}/colab-add-object",
                 json={"room_image": room_image, "object_image": object_image, "prompt": prompt},
                 headers=COLAB_HEADERS,
-                timeout=180,
+                timeout=300,
             )
             result = resp.json()
         except Exception as e:
@@ -476,7 +479,10 @@ def preview_styles():
                 f"{COLAB_URL['url']}/colab-preview",
                 json={"image": image_b64, "palette": palette},
                 headers=COLAB_HEADERS,
-                timeout=300,
+                # Generates all 8 styles in one request; with sequential
+                # offload a single style can take minutes, so this needs a
+                # much longer budget than a single /generate call.
+                timeout=1800,
             )
             result = resp.json()
         except Exception as e:
