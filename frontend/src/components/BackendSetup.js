@@ -70,6 +70,17 @@ export default function BackendSetup({ onConnect }) {
         if (!setRes.ok) {
           throw new Error("register-failed");
         }
+      } else {
+        // Local Dev mode: explicitly disconnect any previously-registered
+        // Colab URL, otherwise the backend keeps preferring it forever (it
+        // has no other way to know you want to switch to Gemini/Replicate).
+        await fetch(`${cleanLocal}/set-colab-url`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: "" }),
+          signal: AbortSignal.timeout(8000),
+        }).catch(() => {});
+        localStorage.removeItem("interiorai_colab_url");
       }
 
       const res = await fetch(`${cleanLocal}/health`, {
