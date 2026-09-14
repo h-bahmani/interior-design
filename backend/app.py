@@ -59,6 +59,15 @@ REPLICATE_INPAINT_MODEL = os.environ.get(
     "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc",
 )
 
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# "Nano Banana 2" — Gemini's native image editing model. Natively multimodal
+# (it actually understands the room in the photo), so it tends to preserve
+# room structure/layout better than a diffusion+ControlNet stack without
+# needing edge maps or heavy negative-prompt engineering. ~$0.03-0.04/image,
+# no free tier for image generation specifically. Use gemini-3.1-flash-lite-image
+# instead for the cheapest/fastest option.
+GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image")
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -164,17 +173,57 @@ def replicate_inpaint(image_path, edit_prompt: str) -> str:
     raise RuntimeError("Replicate returned no output")
 
 
+# ─── Gemini (Nano Banana) Generation ──────────────────────────────────────────
+
+def gemini_generate(image_path, style=None, palette=None, custom_prompt=None) -> str:
+    """Call Gemini's native image editing (Nano Banana) and return base64 JPEG."""
+    from google import genai  # lazy import so app starts even without the package
+
+    prompt = build_prompt(style, palette, custom_prompt)
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    with open(image_path, "rb") as f:
+        image_bytes = f.read()
+
+    interaction = client.interactions.create(
+        model=GEMINI_IMAGE_MODEL,
+        input=[
+            {"type": "text", "text": prompt},
+            {
+                "type": "image",
+                "data": base64.b64encode(image_bytes).decode("utf-8"),
+                "mime_type": "image/jpeg",
+            },
+        ],
+    )
+
+    output_image = interaction.output_image
+    if not output_image:
+        raise RuntimeError("Gemini returned no image")
+
+    img = Image.open(io.BytesIO(base64.b64decode(output_image.data))).convert("RGB")
+    return pil_to_base64(img)
+
+
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
 @app.route("/health", methods=["GET"])
 def health():
     has_replicate = bool(REPLICATE_API_TOKEN)
+    has_gemini = bool(GEMINI_API_KEY)
+    mode = (
+        "colab" if COLAB_URL["url"]
+        else "gemini" if has_gemini
+        else "replicate" if has_replicate
+        else "none"
+    )
     return jsonify({
         "status": "ok",
         "colab_connected": COLAB_URL["url"] is not None,
         "colab_url": COLAB_URL["url"],
         "replicate_enabled": has_replicate,
-        "mode": "colab" if COLAB_URL["url"] else ("replicate" if has_replicate else "none"),
+        "gemini_enabled": has_gemini,
+        "mode": mode,
     })
 
 
@@ -243,7 +292,18 @@ def generate():
         base64_to_image(result["image"], os.path.join(OUTPUT_FOLDER, "room_styled.jpg"))
         return jsonify({"message": "Style transfer complete", "style": style, "image": result["image"]})
 
-    # ── Mode 2: Replicate ──────────────────────────────────────────────────────
+    # ── Mode 2: Gemini (Nano Banana) ───────────────────────────────────────────
+    if GEMINI_API_KEY:
+        try:
+            image_b64 = gemini_generate(upload_path, style, palette, custom_prompt)
+        except Exception as e:
+            return jsonify({"error": f"Gemini generation failed: {e}"}), 500
+
+        output_path = os.path.join(OUTPUT_FOLDER, "room_styled.jpg")
+        base64_to_image(image_b64, output_path)
+        return jsonify({"message": "Style transfer complete", "style": style, "image": image_b64})
+
+    # ── Mode 3: Replicate ──────────────────────────────────────────────────────
     if REPLICATE_API_TOKEN:
         os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
         try:
@@ -255,7 +315,7 @@ def generate():
         base64_to_image(image_b64, output_path)
         return jsonify({"message": "Style transfer complete", "style": style, "image": image_b64})
 
-    return jsonify({"error": "No AI backend connected. Start Colab or set REPLICATE_API_TOKEN."}), 503
+    return jsonify({"error": "No AI backend connected. Start Colab, or set GEMINI_API_KEY / REPLICATE_API_TOKEN."}), 503
 
 
 @app.route("/detect-objects", methods=["POST"])
@@ -417,15 +477,24 @@ def preview_styles():
 
         return jsonify({"message": "Previews generated", "previews": result.get("previews", {})})
 
-    # ── Mode 2: Replicate — generate all 8 styles concurrently ────────────────
-    if REPLICATE_API_TOKEN:
+    # ── Mode 2/3: Gemini or Replicate — generate all 8 styles concurrently ────
+    # Note: this calls the model 8 times (once per style), so it costs ~8x a
+    # single /generate call. Fine occasionally, but avoid spamming this button.
+    generate_fn = None
+    label = None
+    if GEMINI_API_KEY:
+        generate_fn, label = gemini_generate, "Gemini"
+    elif REPLICATE_API_TOKEN:
         os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
+        generate_fn, label = replicate_generate, "Replicate"
+
+    if generate_fn:
         previews = {}
         errors = {}
 
         def gen_style(style_id):
             try:
-                previews[style_id] = replicate_generate(upload_path, style_id, palette)
+                previews[style_id] = generate_fn(upload_path, style_id, palette)
             except Exception as e:
                 errors[style_id] = str(e)
                 print(f"Preview failed for {style_id}: {e}")
@@ -437,11 +506,11 @@ def preview_styles():
             t.join(timeout=120)
 
         if not previews:
-            return jsonify({"error": "All Replicate preview generations failed", "details": errors}), 500
+            return jsonify({"error": f"All {label} preview generations failed", "details": errors}), 500
 
-        return jsonify({"message": "Previews generated via Replicate", "previews": previews})
+        return jsonify({"message": f"Previews generated via {label}", "previews": previews})
 
-    return jsonify({"error": "No AI backend connected. Start Colab or set REPLICATE_API_TOKEN."}), 503
+    return jsonify({"error": "No AI backend connected. Start Colab, or set GEMINI_API_KEY / REPLICATE_API_TOKEN."}), 503
 
 
 if __name__ == "__main__":
@@ -449,5 +518,6 @@ if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
     print("🚀 AI Interior Designer v2 — Flask API")
     print(f"📍 Running on port {port}")
+    print(f"🍌 Gemini: {'enabled' if GEMINI_API_KEY else 'disabled (set GEMINI_API_KEY)'}")
     print(f"🤖 Replicate: {'enabled' if REPLICATE_API_TOKEN else 'disabled (set REPLICATE_API_TOKEN)'}")
     app.run(host="0.0.0.0", port=port, debug=debug)
