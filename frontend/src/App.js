@@ -44,6 +44,13 @@ function AppInner() {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [previousImage, setPreviousImage] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState("checking");
+  // "fast" (SD1.5, quick) or "quality" (SDXL, slower but much better) — only
+  // matters when the AI backend is the Colab notebook, which keeps both
+  // models available and swaps between them on demand.
+  const [genModel, setGenModel] = useState(() => localStorage.getItem("interiorai_gen_model") || "fast");
+  useEffect(() => {
+    localStorage.setItem("interiorai_gen_model", genModel);
+  }, [genModel]);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
   const savedUrl = localStorage.getItem("interiorai_api_url");
@@ -228,7 +235,7 @@ function AppInner() {
       const res = await fetch(`${apiUrl}/generate`, {
         method: "POST",
         headers: apiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ style, palette, customPrompt }),
+        body: JSON.stringify({ style, palette, customPrompt, model: genModel }),
       });
 
       setLoadingStep(4); setLoadingProgress(60);
@@ -308,7 +315,7 @@ function AppInner() {
       const res = await fetch(`${apiUrl}/edit-object`, {
         method: "POST",
         headers: apiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ object, prompt }),
+        body: JSON.stringify({ object, prompt, model: genModel }),
       });
 
       setLoadingStep(3); setLoadingProgress(70);
@@ -356,6 +363,7 @@ function AppInner() {
         body: JSON.stringify({
           image: stripDataUrlPrefix(uploadedImage),
           prompt: prompt,
+          model: genModel,
         }),
       });
 
@@ -418,6 +426,7 @@ function AppInner() {
           room_image: stripDataUrlPrefix(generatedImage || uploadedImage),
           object_image: stripDataUrlPrefix(objectImageDataUrl),
           prompt: placementPrompt,
+          model: genModel,
         }),
       });
 
@@ -535,6 +544,34 @@ function AppInner() {
           </div>
 
           <div className="user-info">
+            {/* Fast (SD1.5) vs Quality (SDXL) — only affects the Colab backend,
+                which keeps both models available and swaps on demand. */}
+            <div
+              className="gen-model-toggle"
+              title="Fast = SD1.5 (quick, lower quality). Quality = SDXL (slower, much better). Only matters when connected via Colab."
+              style={{ display: "flex", gap: 4, marginRight: 10 }}
+            >
+              {["fast", "quality"].map(m => (
+                <button
+                  key={m}
+                  onClick={() => setGenModel(m)}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 6,
+                    fontSize: 11,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    cursor: "pointer",
+                    border: genModel === m ? "1px solid var(--gold)" : "1px solid var(--border)",
+                    background: genModel === m ? "rgba(201, 168, 76, 0.12)" : "transparent",
+                    color: genModel === m ? "var(--gold)" : "var(--text-muted)",
+                  }}
+                >
+                  {m === "fast" ? "⚡ Fast" : "✦ Quality"}
+                </button>
+              ))}
+            </div>
+
             {/* Connection status */}
             <div
               className={`conn-status conn-${connectionStatus}`}

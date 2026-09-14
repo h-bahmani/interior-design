@@ -271,6 +271,9 @@ def generate():
     style = data.get("style")
     palette = data.get("palette")
     custom_prompt = data.get("customPrompt")
+    # "fast" (SD1.5) or "quality" (SDXL) — the Colab notebook keeps both
+    # available and swaps whichever is resident on demand.
+    model = data.get("model", "fast")
 
     if not style and not custom_prompt:
         return jsonify({"error": "style or customPrompt required"}), 400
@@ -285,11 +288,10 @@ def generate():
         try:
             resp = requests.post(
                 f"{COLAB_URL['url']}/colab-generate",
-                json={"image": image_b64, "style": style, "palette": palette, "customPrompt": custom_prompt},
+                json={"image": image_b64, "style": style, "palette": palette, "customPrompt": custom_prompt, "model": model},
                 headers=COLAB_HEADERS,
-                # SDXL with enable_sequential_cpu_offload() (traded for VRAM
-                # safety on the free T4) is much slower than SD1.5 was — a
-                # single generation can take several minutes.
+                # A model switch (fast<->quality) or a "quality" (SDXL)
+                # generation can take a few minutes.
                 timeout=300,
             )
             result = resp.json()
@@ -364,6 +366,7 @@ def edit_object():
     data = request.json or {}
     object_label = data.get("object")
     edit_prompt = data.get("prompt")
+    model = data.get("model", "fast")
 
     if not object_label or not edit_prompt:
         return jsonify({"error": "object and prompt required"}), 400
@@ -382,7 +385,7 @@ def edit_object():
         try:
             resp = requests.post(
                 f"{COLAB_URL['url']}/colab-edit",
-                json={"image": image_b64, "object": object_label, "prompt": edit_prompt},
+                json={"image": image_b64, "object": object_label, "prompt": edit_prompt, "model": model},
                 headers=COLAB_HEADERS,
                 timeout=300,
             )
@@ -415,13 +418,14 @@ def furnish_room():
     data = request.json or {}
     image_b64 = data.get("image")
     prompt = data.get("prompt")
+    model = data.get("model", "fast")
     if not image_b64 or not prompt:
         return jsonify({"error": "image and prompt required"}), 400
     if COLAB_URL["url"]:
         try:
             resp = requests.post(
                 f"{COLAB_URL['url']}/colab-furnish",
-                json={"image": image_b64, "prompt": prompt},
+                json={"image": image_b64, "prompt": prompt, "model": model},
                 headers=COLAB_HEADERS,
                 timeout=300,
             )
@@ -442,13 +446,14 @@ def add_object():
     room_image = data.get("room_image")
     object_image = data.get("object_image")
     prompt = data.get("prompt", "")
+    model = data.get("model", "fast")
     if not room_image or not object_image:
         return jsonify({"error": "room_image and object_image required"}), 400
     if COLAB_URL["url"]:
         try:
             resp = requests.post(
                 f"{COLAB_URL['url']}/colab-add-object",
-                json={"room_image": room_image, "object_image": object_image, "prompt": prompt},
+                json={"room_image": room_image, "object_image": object_image, "prompt": prompt, "model": model},
                 headers=COLAB_HEADERS,
                 timeout=300,
             )
@@ -470,6 +475,9 @@ def preview_styles():
 
     data = request.json or {}
     palette = data.get("palette")
+    # Default "fast" (SD1.5) for the 8x preview loop — "quality" (SDXL) works
+    # too but is slow enough across 8 generations that it's rarely worth it.
+    model = data.get("model", "fast")
 
     # ── Mode 1: Colab ──────────────────────────────────────────────────────────
     if COLAB_URL["url"]:
@@ -477,11 +485,10 @@ def preview_styles():
         try:
             resp = requests.post(
                 f"{COLAB_URL['url']}/colab-preview",
-                json={"image": image_b64, "palette": palette},
+                json={"image": image_b64, "palette": palette, "model": model},
                 headers=COLAB_HEADERS,
-                # Generates all 8 styles in one request; with sequential
-                # offload a single style can take minutes, so this needs a
-                # much longer budget than a single /generate call.
+                # Generates all 8 styles in one request, so needs a much
+                # longer budget than a single /generate call.
                 timeout=1800,
             )
             result = resp.json()
