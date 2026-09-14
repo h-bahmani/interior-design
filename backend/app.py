@@ -68,6 +68,11 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 # instead for the cheapest/fastest option.
 GEMINI_IMAGE_MODEL = os.environ.get("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image")
 
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+# GPT Image — also natively multimodal like Gemini. Check current pricing in
+# your OpenAI dashboard before relying on a number here (it changes).
+OPENAI_IMAGE_MODEL = os.environ.get("OPENAI_IMAGE_MODEL", "gpt-image-1.5")
+
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -205,15 +210,44 @@ def gemini_generate(image_path, style=None, palette=None, custom_prompt=None) ->
     return pil_to_base64(img)
 
 
+# ─── OpenAI (GPT Image) Generation ────────────────────────────────────────────
+
+def openai_generate(image_path, style=None, palette=None, custom_prompt=None) -> str:
+    """Call OpenAI's image edit endpoint (GPT Image) and return base64 JPEG."""
+    prompt = build_prompt(style, palette, custom_prompt)
+
+    with open(image_path, "rb") as f:
+        resp = requests.post(
+            "https://api.openai.com/v1/images/edits",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
+            data={"model": OPENAI_IMAGE_MODEL, "prompt": prompt, "size": "1024x1024"},
+            files={"image[]": (os.path.basename(image_path), f, "image/jpeg")},
+            timeout=120,
+        )
+
+    if not resp.ok:
+        raise RuntimeError(f"OpenAI API error {resp.status_code}: {resp.text[:300]}")
+
+    data = resp.json()
+    items = data.get("data") or []
+    if not items or "b64_json" not in items[0]:
+        raise RuntimeError(f"OpenAI returned no image: {data}")
+
+    img = Image.open(io.BytesIO(base64.b64decode(items[0]["b64_json"]))).convert("RGB")
+    return pil_to_base64(img)
+
+
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
 @app.route("/health", methods=["GET"])
 def health():
     has_replicate = bool(REPLICATE_API_TOKEN)
     has_gemini = bool(GEMINI_API_KEY)
+    has_openai = bool(OPENAI_API_KEY)
     mode = (
         "colab" if COLAB_URL["url"]
         else "gemini" if has_gemini
+        else "openai" if has_openai
         else "replicate" if has_replicate
         else "none"
     )
@@ -223,6 +257,7 @@ def health():
         "colab_url": COLAB_URL["url"],
         "replicate_enabled": has_replicate,
         "gemini_enabled": has_gemini,
+        "openai_enabled": has_openai,
         "mode": mode,
     })
 
@@ -315,7 +350,18 @@ def generate():
         base64_to_image(image_b64, output_path)
         return jsonify({"message": "Style transfer complete", "style": style, "image": image_b64})
 
-    # ── Mode 3: Replicate ──────────────────────────────────────────────────────
+    # ── Mode 3: OpenAI (GPT Image) ─────────────────────────────────────────────
+    if OPENAI_API_KEY:
+        try:
+            image_b64 = openai_generate(upload_path, style, palette, custom_prompt)
+        except Exception as e:
+            return jsonify({"error": f"OpenAI generation failed: {e}"}), 500
+
+        output_path = os.path.join(OUTPUT_FOLDER, "room_styled.jpg")
+        base64_to_image(image_b64, output_path)
+        return jsonify({"message": "Style transfer complete", "style": style, "image": image_b64})
+
+    # ── Mode 4: Replicate ──────────────────────────────────────────────────────
     if REPLICATE_API_TOKEN:
         os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
         try:
@@ -327,7 +373,7 @@ def generate():
         base64_to_image(image_b64, output_path)
         return jsonify({"message": "Style transfer complete", "style": style, "image": image_b64})
 
-    return jsonify({"error": "No AI backend connected. Start Colab, or set GEMINI_API_KEY / REPLICATE_API_TOKEN."}), 503
+    return jsonify({"error": "No AI backend connected. Start Colab, or set GEMINI_API_KEY / OPENAI_API_KEY / REPLICATE_API_TOKEN."}), 503
 
 
 @app.route("/detect-objects", methods=["POST"])
@@ -504,6 +550,8 @@ def preview_styles():
     label = None
     if GEMINI_API_KEY:
         generate_fn, label = gemini_generate, "Gemini"
+    elif OPENAI_API_KEY:
+        generate_fn, label = openai_generate, "OpenAI"
     elif REPLICATE_API_TOKEN:
         os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
         generate_fn, label = replicate_generate, "Replicate"
@@ -539,5 +587,6 @@ if __name__ == "__main__":
     print("🚀 AI Interior Designer v2 — Flask API")
     print(f"📍 Running on port {port}")
     print(f"🍌 Gemini: {'enabled' if GEMINI_API_KEY else 'disabled (set GEMINI_API_KEY)'}")
+    print(f"🤖 OpenAI: {'enabled' if OPENAI_API_KEY else 'disabled (set OPENAI_API_KEY)'}")
     print(f"🤖 Replicate: {'enabled' if REPLICATE_API_TOKEN else 'disabled (set REPLICATE_API_TOKEN)'}")
     app.run(host="0.0.0.0", port=port, debug=debug)
