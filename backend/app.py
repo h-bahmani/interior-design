@@ -232,7 +232,14 @@ def set_colab_url():
     data = request.json or {}
     url = data.get("url", "").strip()
     if not url:
-        return jsonify({"error": "No URL provided"}), 400
+        # Empty url = explicitly disconnect Colab, so /generate falls through
+        # to Gemini/Replicate instead of always preferring Colab whenever any
+        # URL was ever registered (Colab priority otherwise never releases
+        # until the process restarts, with no way to switch backends live).
+        COLAB_URL["url"] = None
+        COLAB_HEADERS.pop("Authorization", None)
+        print("Colab disconnected")
+        return jsonify({"message": "Colab disconnected"})
     COLAB_URL["url"] = url.rstrip("/")
     connection_key = data.get("connection_key", "").strip()
     if connection_key:
