@@ -14,3 +14,20 @@ export function apiHeaders(extra = {}) {
 }
 
 export const API_URL = ENV_URL;
+
+// True for http://localhost:* or http://127.0.0.1:* — the local Flask backend.
+export function isLocalUrl(url) {
+  return typeof url === "string" && (url.includes("localhost") || url.includes("127.0.0.1"));
+}
+
+// FileReader.readAsDataURL() (used by Upload.js) yields "data:image/jpeg;base64,XXXX".
+// Routes that send raw base64 straight to the backend (not through /upload) need
+// just the XXXX part — the backend/Colab side decodes with base64.b64decode(),
+// which silently mangles the "data:image/...;base64," prefix into garbage bytes.
+export function stripDataUrlPrefix(dataUrl) {
+  if (typeof dataUrl !== "string") return dataUrl;
+  const commaIndex = dataUrl.indexOf(",");
+  return dataUrl.startsWith("data:") && commaIndex !== -1
+    ? dataUrl.slice(commaIndex + 1)
+    : dataUrl;
+}

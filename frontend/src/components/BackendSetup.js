@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { isLocalUrl } from "../config";
 import "./BackendSetup.css";
 
 const MODES = [
@@ -20,7 +21,10 @@ const MODES = [
 const DEFAULT_LOCAL_URL = "http://localhost:5000";
 
 export default function BackendSetup({ onConnect }) {
-  const saved = localStorage.getItem("interiorai_api_url") || DEFAULT_LOCAL_URL;
+  // A previous "Colab" attempt (before this was fixed) could have saved the raw
+  // ngrok URL here directly — never trust that as the local backend address.
+  const savedRaw = localStorage.getItem("interiorai_api_url");
+  const saved = savedRaw && isLocalUrl(savedRaw) ? savedRaw : DEFAULT_LOCAL_URL;
   const savedColab = localStorage.getItem("interiorai_colab_url") || "";
 
   const [mode, setMode] = useState(savedColab ? "colab" : "local");

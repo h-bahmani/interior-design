@@ -13,7 +13,7 @@ import ObjectEditor from "./components/ObjectEditor";
 import Auth from "./components/Auth";
 import BackendSetup from "./components/BackendSetup";
 import { ToastProvider, useToast } from "./components/Toast";
-import { API_URL, apiHeaders } from "./config";
+import { API_URL, apiHeaders, stripDataUrlPrefix, isLocalUrl } from "./config";
 import "./App.css";
 
 const STEPS = ["upload", "style", "result", "edit"];
@@ -47,8 +47,12 @@ function AppInner() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
   const savedUrl = localStorage.getItem("interiorai_api_url");
-  // On Vercel, never use a localhost URL — it was saved from a local session
-  const isUsable = savedUrl && (isLocalhost || (!savedUrl.includes("localhost") && !savedUrl.includes("127.0.0.1")));
+  // The saved apiUrl must always be the local Flask backend, never a raw Colab/
+  // ngrok URL (which needs a CONNECTION_KEY header this app never sends) — so
+  // when we're on localhost, the saved value must also be a local address; when
+  // deployed (Vercel etc.), a stale localhost URL saved from a local session
+  // would be unreachable and must be discarded too.
+  const isUsable = savedUrl && (isLocalhost ? isLocalUrl(savedUrl) : !isLocalUrl(savedUrl));
   if (savedUrl && !isUsable) localStorage.removeItem("interiorai_api_url");
   const initialUrl = isUsable ? savedUrl : (isLocalhost ? API_URL : "");
 
@@ -350,16 +354,16 @@ function AppInner() {
         method: "POST",
         headers: apiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
-          image: uploadedImage,
+          image: stripDataUrlPrefix(uploadedImage),
           prompt: prompt,
         }),
       });
-  
+
       setLoadingStep(2);
       setLoadingProgress(70);
-  
+
       const contentType = res.headers.get("content-type") || "";
-  
+
       if (!res.ok || !contentType.includes("application/json")) {
         toast(
           "Furnish failed — check backend connection.",
@@ -368,16 +372,16 @@ function AppInner() {
         );
         return;
       }
-  
+
       const data = await res.json();
-  
+
       if (data.image) {
         const imgSrc = "data:image/jpeg;base64," + data.image;
-  
+
         setGeneratedImage(imgSrc);
         setSelectedStyle("furnished");
         setStep("result");
-  
+
         toast(
           "Room furnished successfully!",
           "success"
@@ -385,12 +389,63 @@ function AppInner() {
       } else {
         toast(data.error || "Furnish failed", "error");
       }
-  
+
     } catch (err) {
       toast(
         "Furnish failed — check backend connection.",
         "error"
       );
+    } finally {
+      setLoading(false);
+      setLoadingStep(0);
+      setLoadingProgress(0);
+    }
+  };
+
+  const handleAddObject = async (objectImageDataUrl, placementPrompt) => {
+    setLoading(true);
+    setLoadingStep(0);
+    setLoadingProgress(0);
+
+    try {
+      setLoadingStep(1);
+      setLoadingProgress(20);
+
+      const res = await fetch(`${apiUrl}/add-object`, {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          room_image: stripDataUrlPrefix(generatedImage || uploadedImage),
+          object_image: stripDataUrlPrefix(objectImageDataUrl),
+          prompt: placementPrompt,
+        }),
+      });
+
+      setLoadingStep(2);
+      setLoadingProgress(70);
+
+      const contentType = res.headers.get("content-type") || "";
+
+      if (!res.ok || !contentType.includes("application/json")) {
+        toast("Add object failed — check backend connection.", "error", 6000);
+        return;
+      }
+
+      const data = await res.json();
+
+      if (data.image) {
+        const imgSrc = "data:image/jpeg;base64," + data.image;
+
+        setGeneratedImage(imgSrc);
+        setSelectedStyle("furnished");
+        setStep("result");
+
+        toast("Item added to your room!", "success");
+      } else {
+        toast(data.error || "Add object failed", "error");
+      }
+    } catch (err) {
+      toast("Add object failed — check backend connection.", "error");
     } finally {
       setLoading(false);
       setLoadingStep(0);
@@ -729,7 +784,7 @@ function AppInner() {
                 <p>Select a design aesthetic to transform your room</p>
               </div>
               <StyleSelector uploadedImage={uploadedImage} onGenerate={handleGenerate} />
-              <FurnishRoom uploadedImage={uploadedImage} onFurnish={handleFurnish}/>
+              <FurnishRoom uploadedImage={uploadedImage} onFurnish={handleFurnish} onAddObject={handleAddObject}/>
             </motion.div>
           )}
 

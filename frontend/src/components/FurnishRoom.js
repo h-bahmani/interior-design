@@ -61,12 +61,14 @@ const STYLE_PREFERENCES = [
   { id: "eclectic", name: "Eclectic", desc: "Mixed, unique, creative" },
 ];
 
-export default function FurnishRoom({ uploadedImage, onFurnish }) {
+export default function FurnishRoom({ uploadedImage, onFurnish, onAddObject }) {
   const [roomType, setRoomType] = useState(null);
   const [selectedItems, setSelectedItems] = useState([]);
   const [stylePreference, setStylePreference] = useState(null);
   const [activeCategory, setActiveCategory] = useState(null);
   const [customItem, setCustomItem] = useState("");
+  const [objectPhoto, setObjectPhoto] = useState(null);
+  const [objectPlacement, setObjectPlacement] = useState("");
 
   const currentCategories = roomType ? ROOM_FURNITURE[roomType] : null;
 
@@ -108,6 +110,21 @@ const buildPrompt = () => {
   };
 
   const canGenerate = roomType && selectedItems.length > 0;
+
+  const handleObjectPhotoSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setObjectPhoto(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const canAddObject = !!objectPhoto;
+
+  const handleAddObjectClick = () => {
+    if (!canAddObject) return;
+    onAddObject(objectPhoto, objectPlacement);
+  };
 
   return (
     <div className="furnish-container">
@@ -292,6 +309,67 @@ const buildPrompt = () => {
             ? "Select a room type to see furniture options"
             : "Select at least one furniture item to continue"}
         </p>
+      )}
+
+      {/* Optional — insert an exact item from a reference photo */}
+      {onAddObject && (
+        <div className="furnish-section furnish-refphoto">
+          <h3 className="furnish-section-title">
+            <span className="furnish-step">+</span>
+            Have a specific item in mind?
+            <span className="furnish-optional">(optional)</span>
+          </h3>
+          <p className="furnish-hint furnish-refphoto-hint">
+            Upload a photo of the exact chair, lamp, sofa — anything — and the AI
+            will place that item into your room instead of just following a text prompt.
+          </p>
+
+          <div className="furnish-refphoto-row">
+            <label className="furnish-refphoto-upload">
+              {objectPhoto ? (
+                <img src={objectPhoto} alt="Reference item" className="furnish-refphoto-thumb" />
+              ) : (
+                <span className="furnish-refphoto-placeholder">+ Upload item photo</span>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleObjectPhotoSelect}
+                hidden
+              />
+            </label>
+
+            <div className="furnish-refphoto-fields">
+              <input
+                type="text"
+                placeholder='Where should it go? e.g. "next to the window" (optional)'
+                value={objectPlacement}
+                onChange={e => setObjectPlacement(e.target.value)}
+                className="furnish-custom-field"
+              />
+              <div className="furnish-refphoto-actions">
+                {objectPhoto && (
+                  <button
+                    className="furnish-custom-add"
+                    onClick={() => { setObjectPhoto(null); setObjectPlacement(""); }}
+                  >
+                    Remove photo
+                  </button>
+                )}
+                <motion.button
+                  className="furnish-generate-btn furnish-refphoto-btn"
+                  disabled={!canAddObject}
+                  onClick={handleAddObjectClick}
+                  whileHover={canAddObject ? { scale: 1.02 } : {}}
+                  whileTap={canAddObject ? { scale: 0.98 } : {}}
+                >
+                  <span>Add This Item</span>
+                  <span className="furnish-btn-arrow">→</span>
+                </motion.button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
