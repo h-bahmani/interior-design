@@ -44,13 +44,15 @@ STYLE_PROMPTS = {
 
 REPLICATE_API_TOKEN = os.environ.get("REPLICATE_API_TOKEN", "")
 
-# Replicate model — SDXL supports img2img/inpaint via the `image`/`mask` inputs.
-# The old pinned stable-diffusion-img2img version (15a3689e) now returns
-# "422 Invalid version or not permitted" for new API tokens, so we default to
-# SDXL's current version instead. User can override via env var.
+# Replicate model — FLUX.1 Canny [dev]: an edge-guided model (auto-generates
+# the Canny map from control_image itself, no local preprocessing needed) that
+# is dramatically higher quality than SD1.5/SDXL at prompt-following and detail,
+# for $0.025/image. It's an "official" Replicate model with no version to pin —
+# calling it by name always resolves to the current build, unlike the old SD1.5
+# checkpoint hash which silently stopped working for new API tokens.
 REPLICATE_IMG2IMG_MODEL = os.environ.get(
     "REPLICATE_IMG2IMG_MODEL",
-    "stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc",
+    "black-forest-labs/flux-canny-dev",
 )
 REPLICATE_INPAINT_MODEL = os.environ.get(
     "REPLICATE_INPAINT_MODEL",
@@ -86,12 +88,19 @@ def url_to_base64(url: str) -> str:
     return pil_to_base64(img)
 
 
+ROOM_PRESERVE = (
+    ", keep the exact same room type and function, same walls, same windows, "
+    "same doors, same fixed furniture layout — only change materials, colors, "
+    "lighting fixtures and decor"
+)
+
+
 def build_prompt(style=None, palette=None, custom_prompt=None) -> str:
     if custom_prompt:
-        return f"{custom_prompt}, photorealistic interior design, high quality, 8k, detailed"
+        return f"{custom_prompt}{ROOM_PRESERVE}, photorealistic interior design, high quality, 8k, detailed"
 
     base = STYLE_PROMPTS.get(style, "modern interior design, stylish, high quality")
-    prompt = f"{base}, photorealistic, 8k, highly detailed, interior photography"
+    prompt = f"{base}{ROOM_PRESERVE}, photorealistic, 8k, highly detailed, interior photography"
 
     if palette and isinstance(palette, dict):
         colors = palette.get("colors", [])
@@ -104,23 +113,20 @@ def build_prompt(style=None, palette=None, custom_prompt=None) -> str:
 # ─── Replicate Generation ─────────────────────────────────────────────────────
 
 def replicate_generate(image_path, style=None, palette=None, custom_prompt=None) -> str:
-    """Call Replicate img2img and return base64 JPEG."""
+    """Call Replicate FLUX.1 Canny [dev] (edge-guided) and return base64 JPEG."""
     import replicate as rep  # lazy import so app starts even without package
 
     prompt = build_prompt(style, palette, custom_prompt)
-    negative = "blurry, bad quality, distorted, ugly, low resolution, watermark, text"
 
     with open(image_path, "rb") as f:
         output = rep.run(
             REPLICATE_IMG2IMG_MODEL,
             input={
-                "image": f,
+                "control_image": f,
                 "prompt": prompt,
-                "negative_prompt": negative,
-                "prompt_strength": 0.75,
-                "num_inference_steps": 25,
-                "guidance_scale": 7.5,
-                "scheduler": "DPMSolverMultistep",
+                "guidance": 30,
+                "num_inference_steps": 30,
+                "output_format": "jpg",
             },
         )
 
