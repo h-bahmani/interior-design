@@ -3,11 +3,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import "./FurnishRoom.css";
 
 const ROOM_TYPES = [
-  { id: "living_room", name: "Living Room", icon: "⬜" },
-  { id: "bedroom", name: "Bedroom", icon: "◻" },
-  { id: "kitchen", name: "Kitchen", icon: "◈" },
-  { id: "home_office", name: "Home Office", icon: "◇" },
-  { id: "dining_room", name: "Dining Room", icon: "⬡" },
+  { id: "living_room", name: "Living Room", icon: "🛋️" },
+  { id: "bedroom", name: "Bedroom", icon: "🛏️" },
+  { id: "kitchen", name: "Kitchen", icon: "🍳" },
+  { id: "home_office", name: "Home Office", icon: "💻" },
+  { id: "dining_room", name: "Dining Room", icon: "🍽️" },
 ];
 
 const ROOM_FURNITURE = {
