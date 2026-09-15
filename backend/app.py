@@ -108,13 +108,18 @@ ROOM_PRESERVE = (
     "lighting fixtures and decor"
 )
 
+# The most common failure mode across all of these engines isn't structure
+# (that's ControlNet/native understanding's job) — it's drifting toward an
+# illustrated/rendered look instead of a real photo.
+QUALITY_BOOST = ", RAW photo, shot on DSLR, natural photography, professional real estate photography, realistic materials and textures"
+
 
 def build_prompt(style=None, palette=None, custom_prompt=None) -> str:
     if custom_prompt:
-        return f"{custom_prompt}{ROOM_PRESERVE}, photorealistic interior design, high quality, 8k, detailed"
+        return f"{custom_prompt}{ROOM_PRESERVE}{QUALITY_BOOST}, photorealistic interior design, high quality, 8k, detailed"
 
     base = STYLE_PROMPTS.get(style, "modern interior design, stylish, high quality")
-    prompt = f"{base}{ROOM_PRESERVE}, photorealistic, 8k, highly detailed, interior photography"
+    prompt = f"{base}{ROOM_PRESERVE}{QUALITY_BOOST}, photorealistic, 8k, highly detailed, interior photography"
 
     if palette and isinstance(palette, dict):
         colors = palette.get("colors", [])
