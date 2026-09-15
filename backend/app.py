@@ -1,7 +1,7 @@
 import os
 import base64
 import io
-import threading
+import time
 import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -246,14 +246,15 @@ def openai_generate(image_path, style=None, palette=None, custom_prompt=None) ->
 
 @app.route("/health", methods=["GET"])
 def health():
+    # OpenAI/Replicate are deliberately disabled in /generate and /preview-styles
+    # right now (not funded) — reflect that here too rather than claiming a mode
+    # that won't actually be used.
     has_replicate = bool(REPLICATE_API_TOKEN)
     has_gemini = bool(GEMINI_API_KEY)
     has_openai = bool(OPENAI_API_KEY)
     mode = (
         "colab" if COLAB_URL["url"]
         else "gemini" if has_gemini
-        else "openai" if has_openai
-        else "replicate" if has_replicate
         else "none"
     )
     return jsonify({
@@ -355,30 +356,32 @@ def generate():
         base64_to_image(image_b64, output_path)
         return jsonify({"message": "Style transfer complete", "style": style, "image": image_b64})
 
-    # ── Mode 3: OpenAI (GPT Image) ─────────────────────────────────────────────
-    if OPENAI_API_KEY:
-        try:
-            image_b64 = openai_generate(upload_path, style, palette, custom_prompt)
-        except Exception as e:
-            return jsonify({"error": f"OpenAI generation failed: {e}"}), 500
+    # ── Mode 3: OpenAI (GPT Image) — disabled for now, not funded. Uncomment to
+    #    re-enable; code is left intact and untouched. ─────────────────────────
+    # if OPENAI_API_KEY:
+    #     try:
+    #         image_b64 = openai_generate(upload_path, style, palette, custom_prompt)
+    #     except Exception as e:
+    #         return jsonify({"error": f"OpenAI generation failed: {e}"}), 500
+    #
+    #     output_path = os.path.join(OUTPUT_FOLDER, "room_styled.jpg")
+    #     base64_to_image(image_b64, output_path)
+    #     return jsonify({"message": "Style transfer complete", "style": style, "image": image_b64})
 
-        output_path = os.path.join(OUTPUT_FOLDER, "room_styled.jpg")
-        base64_to_image(image_b64, output_path)
-        return jsonify({"message": "Style transfer complete", "style": style, "image": image_b64})
+    # ── Mode 4: Replicate — disabled for now, not funded. Uncomment to
+    #    re-enable; code is left intact and untouched. ─────────────────────────
+    # if REPLICATE_API_TOKEN:
+    #     os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
+    #     try:
+    #         image_b64 = replicate_generate(upload_path, style, palette, custom_prompt)
+    #     except Exception as e:
+    #         return jsonify({"error": f"Replicate generation failed: {e}"}), 500
+    #
+    #     output_path = os.path.join(OUTPUT_FOLDER, "room_styled.jpg")
+    #     base64_to_image(image_b64, output_path)
+    #     return jsonify({"message": "Style transfer complete", "style": style, "image": image_b64})
 
-    # ── Mode 4: Replicate ──────────────────────────────────────────────────────
-    if REPLICATE_API_TOKEN:
-        os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
-        try:
-            image_b64 = replicate_generate(upload_path, style, palette, custom_prompt)
-        except Exception as e:
-            return jsonify({"error": f"Replicate generation failed: {e}"}), 500
-
-        output_path = os.path.join(OUTPUT_FOLDER, "room_styled.jpg")
-        base64_to_image(image_b64, output_path)
-        return jsonify({"message": "Style transfer complete", "style": style, "image": image_b64})
-
-    return jsonify({"error": "No AI backend connected. Start Colab, or set GEMINI_API_KEY / OPENAI_API_KEY / REPLICATE_API_TOKEN."}), 503
+    return jsonify({"error": "No AI backend connected. Start Colab, or set GEMINI_API_KEY."}), 503
 
 
 @app.route("/detect-objects", methods=["POST"])
@@ -548,42 +551,38 @@ def preview_styles():
 
         return jsonify({"message": "Previews generated", "previews": result.get("previews", {})})
 
-    # ── Mode 2/3: Gemini or Replicate — generate all 8 styles concurrently ────
-    # Note: this calls the model 8 times (once per style), so it costs ~8x a
-    # single /generate call. Fine occasionally, but avoid spamming this button.
-    generate_fn = None
-    label = None
+    # ── Mode 2: Gemini — generate all 8 styles SEQUENTIALLY, with a short pause
+    #    between calls. Firing all 8 at once (the old threading.Thread approach)
+    #    is exactly what tripped Gemini's rate limit ("429 too_many_requests")
+    #    live — APIs like this cap requests per minute, not just per day.
+    # OpenAI/Replicate intentionally left out here too (not funded right now);
+    # uncomment the block below to bring either back into the fallback chain.
     if GEMINI_API_KEY:
-        generate_fn, label = gemini_generate, "Gemini"
-    elif OPENAI_API_KEY:
-        generate_fn, label = openai_generate, "OpenAI"
-    elif REPLICATE_API_TOKEN:
-        os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
-        generate_fn, label = replicate_generate, "Replicate"
-
-    if generate_fn:
         previews = {}
         errors = {}
 
-        def gen_style(style_id):
+        for i, style_id in enumerate(STYLE_PROMPTS):
             try:
-                previews[style_id] = generate_fn(upload_path, style_id, palette)
+                previews[style_id] = gemini_generate(upload_path, style_id, palette)
             except Exception as e:
                 errors[style_id] = str(e)
                 print(f"Preview failed for {style_id}: {e}")
-
-        threads = [threading.Thread(target=gen_style, args=(s,)) for s in STYLE_PROMPTS]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=120)
+            if i < len(STYLE_PROMPTS) - 1:
+                time.sleep(2)  # stay under per-minute rate limits
 
         if not previews:
-            return jsonify({"error": f"All {label} preview generations failed", "details": errors}), 500
+            return jsonify({"error": "All Gemini preview generations failed", "details": errors}), 500
 
-        return jsonify({"message": f"Previews generated via {label}", "previews": previews})
+        return jsonify({"message": "Previews generated via Gemini", "previews": previews})
 
-    return jsonify({"error": "No AI backend connected. Start Colab, or set GEMINI_API_KEY / REPLICATE_API_TOKEN."}), 503
+    # elif OPENAI_API_KEY:
+    #     generate_fn, label = openai_generate, "OpenAI"
+    # elif REPLICATE_API_TOKEN:
+    #     os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
+    #     generate_fn, label = replicate_generate, "Replicate"
+    # (same sequential-with-delay pattern as above applies to either)
+
+    return jsonify({"error": "No AI backend connected. Start Colab, or set GEMINI_API_KEY."}), 503
 
 
 if __name__ == "__main__":
