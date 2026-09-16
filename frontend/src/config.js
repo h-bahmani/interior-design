@@ -1,33 +1,20 @@
-const ENV_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-
+const ENV_URL = process.env.REACT_APP_API_URL || "http://localhost:7860";
 export function getApiUrl() {
-  return localStorage.getItem("interiorai_api_url") || ENV_URL;
+  const saved = localStorage.getItem("interiorai_api_url");
+  const local = ['localhost','127.0.0.1'].includes(window.location.hostname);
+  const url = saved || ENV_URL;
+  if (!local && /^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)) return '';
+  return url.replace(/\/+$/, '');
 }
-
-// Headers required for every request — ngrok intercepts browser fetches unless
-// this header is present, so we always include it (harmless for non-ngrok URLs).
+export function getConnectionKey() {
+  return localStorage.getItem("interiorai_connection_key") || "";
+}
 export function apiHeaders(extra = {}) {
+  const key = getConnectionKey();
   return {
     "ngrok-skip-browser-warning": "true",
+    ...(key ? { Authorization: "Bearer " + key } : {}),
     ...extra,
   };
 }
-
 export const API_URL = ENV_URL;
-
-// True for http://localhost:* or http://127.0.0.1:* — the local Flask backend.
-export function isLocalUrl(url) {
-  return typeof url === "string" && (url.includes("localhost") || url.includes("127.0.0.1"));
-}
-
-// FileReader.readAsDataURL() (used by Upload.js) yields "data:image/jpeg;base64,XXXX".
-// Routes that send raw base64 straight to the backend (not through /upload) need
-// just the XXXX part — the backend/Colab side decodes with base64.b64decode(),
-// which silently mangles the "data:image/...;base64," prefix into garbage bytes.
-export function stripDataUrlPrefix(dataUrl) {
-  if (typeof dataUrl !== "string") return dataUrl;
-  const commaIndex = dataUrl.indexOf(",");
-  return dataUrl.startsWith("data:") && commaIndex !== -1
-    ? dataUrl.slice(commaIndex + 1)
-    : dataUrl;
-}

@@ -1,919 +1,176 @@
-/* eslint-disable no-unused-vars */
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { auth, db } from './firebase';
+import Auth from './components/Auth';
+import BackendSetup from './components/BackendSetup';
+import Upload from './components/Upload';
+import StyleSelector from './components/StyleSelector';
+import FurnishRoom from './components/FurnishRoom';
+import ObjectEditor from './components/ObjectEditor';
+import AddObjectFromPhoto from './components/AddObjectFromPhoto';
+import ResultView from './components/ResultView';
+import { ToastProvider, useToast } from './components/Toast';
+import { getApiUrl } from './config';
+import { apiRequest, imageSource } from './services/api';
+import './App.css';
+import './Workflow.css';
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
-import { auth, db } from "./firebase";
-import FurnishRoom from "./components/FurnishRoom";
-import Upload from "./components/Upload";
-import StyleSelector from "./components/StyleSelector";
-import ResultView from "./components/ResultView";
-import ObjectEditor from "./components/ObjectEditor";
-import Auth from "./components/Auth";
-import BackendSetup from "./components/BackendSetup";
-import { ToastProvider, useToast } from "./components/Toast";
-import { API_URL, apiHeaders, stripDataUrlPrefix, isLocalUrl } from "./config";
-import "./App.css";
-
-const STEPS = ["upload", "style", "result", "edit"];
-
-const SHORTCUTS = [
-  { key: "Ctrl + Z", desc: "Undo last edit" },
-  { key: "Ctrl + H", desc: "Toggle history panel" },
-  { key: "Ctrl + D", desc: "Download current result" },
-  { key: "?",        desc: "Show keyboard shortcuts" },
-  { key: "Esc",      desc: "Close any open panel" },
-];
-
+const TOOLS = [['style','8 Design Styles'],['furnish','Furnish Rooms'],['object','Object Editing / Deleting'],['addobject','Add Object From Photo']];
 function AppInner() {
-  const toast = useToast();
-
-  const [step, setStep] = useState("upload");
-  const [uploadedImage, setUploadedImage] = useState(null);
-  const [selectedStyle, setSelectedStyle] = useState(null);
-  const [generatedImage, setGeneratedImage] = useState(null);
-  const [detectedObjects, setDetectedObjects] = useState([]);
-  const [editedImage, setEditedImage] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [history, setHistory] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [loadingStep, setLoadingStep] = useState(0);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [previousImage, setPreviousImage] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState("checking");
-  // "fast" (SD1.5, quick) or "quality" (SDXL, slower but much better) — only
-  // matters when the AI backend is the Colab notebook, which keeps both
-  // models available and swaps between them on demand.
-  const [genModel, setGenModel] = useState(() => localStorage.getItem("interiorai_gen_model") || "fast");
-  useEffect(() => {
-    localStorage.setItem("interiorai_gen_model", genModel);
-  }, [genModel]);
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-  const savedUrl = localStorage.getItem("interiorai_api_url");
-  // The saved apiUrl must always be the local Flask backend, never a raw Colab/
-  // ngrok URL (which needs a CONNECTION_KEY header this app never sends) — so
-  // when we're on localhost, the saved value must also be a local address; when
-  // deployed (Vercel etc.), a stale localhost URL saved from a local session
-  // would be unreachable and must be discarded too.
-  const isUsable = savedUrl && (isLocalhost ? isLocalUrl(savedUrl) : !isLocalUrl(savedUrl));
-  if (savedUrl && !isUsable) localStorage.removeItem("interiorai_api_url");
-  const initialUrl = isUsable ? savedUrl : (isLocalhost ? API_URL : "");
-
-  const [showBackendSetup, setShowBackendSetup] = useState(!initialUrl);
-  const [apiUrl, setApiUrl] = useState(initialUrl);
-
-  const downloadRef = useRef(null);
-  const generatedImageRef = useRef(null);
-  const previousImageRef = useRef(null);
-
-  // Keep refs in sync for keyboard shortcut handlers (avoid stale closures)
-  useEffect(() => { generatedImageRef.current = generatedImage; }, [generatedImage]);
-  useEffect(() => { previousImageRef.current = previousImage; }, [previousImage]);
-
-  // Auth listener
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setAuthChecked(true);
-    });
-    return unsub;
-  }, []);
-
-  // Live Colab URL from Firestore — auto-connects when Colab is running
-  useEffect(() => {
-    const unsub = onSnapshot(doc(db, "config", "colab_url"), (snap) => {
-      if (snap.exists()) {
-        const { url, active } = snap.data();
-        if (url && active) {
-          localStorage.setItem("interiorai_api_url", url);
-          setApiUrl(url);
-          setShowBackendSetup(false);
-        } else {
-          // Colab marked inactive — clear saved URL so popup shows next refresh
-          localStorage.removeItem("interiorai_api_url");
-        }
-      }
-    });
-    return unsub;
-  }, []);
-
-  // Restore history from localStorage on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("interiorai_history");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setHistory(parsed);
-          toast(`Restored ${parsed.length} item${parsed.length > 1 ? "s" : ""} from last session`, "info", 3000);
-        }
-      }
-    } catch { /* ignore corrupt storage */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Persist history to localStorage whenever it changes
-  useEffect(() => {
-    if (history.length > 0) {
-      try {
-        localStorage.setItem("interiorai_history", JSON.stringify(history.slice(0, 8)));
-      } catch { /* storage full — ignore */ }
+  const toast=useToast();
+  const [user,setUser]=useState(null), [authChecked,setAuthChecked]=useState(false);
+  const [apiUrl,setApiUrl]=useState(getApiUrl), [setup,setSetup]=useState(false), [connection,setConnection]=useState('checking');
+  const [current,setCurrent]=useState(null), [original,setOriginal]=useState(null), [before,setBefore]=useState(null);
+  const [history,setHistory]=useState([]), [showHistory,setShowHistory]=useState(false);
+  const [tool,setTool]=useState('style'), [regions,setRegions]=useState([]), [selection,setSelection]=useState(null);
+  const [busy,setBusy]=useState(''), [version,setVersion]=useState(0);
+  const [genModel,setGenModel]=useState(()=>localStorage.getItem('interiorai_gen_model')||'fast');
+  const changeModel=m=>{setGenModel(m);localStorage.setItem('interiorai_gen_model',m);};
+  const lock=useRef(false), revision=useRef(0), pending=useRef(null), activeUrl=useRef(apiUrl), download=useRef(null), toolPanel=useRef(null);
+  const invalidate=useCallback(()=>{
+    revision.current+=1; setVersion(revision.current);setRegions([]);setSelection(null);
+  },[]);
+  const changeUrl=useCallback((url)=>{
+    const clean=url.trim().replace(/\/+$/,'');
+    if(clean===activeUrl.current)return;
+    activeUrl.current=clean;pending.current?.abort();invalidate();setApiUrl(clean);
+    localStorage.setItem('interiorai_api_url',clean);
+  },[invalidate]);
+  useEffect(()=>onAuthStateChanged(auth,u=>{
+    pending.current?.abort(); invalidate();setUser(u);setAuthChecked(true);
+    setCurrent(null);setOriginal(null);setBefore(null);setHistory([]);
+  }),[invalidate]);
+  useEffect(()=>()=>pending.current?.abort(),[]);
+  useEffect(()=>onSnapshot(doc(db,'config','colab_url'),snap=>{
+    if(snap.exists()){
+      const {url,active}=snap.data();
+      if(typeof url==='string' && active){changeUrl(url);setSetup(false);}
     }
-  }, [history]);
-
-  // Connection status polling
-  useEffect(() => {
-    const checkHealth = async () => {
-      // No URL configured — show setup popup, don't fire any network request
-      if (!apiUrl) {
-        setConnectionStatus("offline");
-        setShowBackendSetup(true);
-        return;
-      }
-      try {
-        const res = await fetch(`${apiUrl}/health`, {
-          signal: AbortSignal.timeout(5000),
-          headers: apiHeaders(),
-        });
-        const data = await res.json();
-        // Accept both new format {colab_connected:true} and old Colab format {status:"Colab is running"}
-        const isFull = data.colab_connected === true ||
-                       (typeof data.status === "string" && data.status.toLowerCase().includes("colab"));
-        setConnectionStatus(isFull ? "full" : "partial");
-        setShowBackendSetup(false);
-      } catch {
-        setConnectionStatus("offline");
-        setShowBackendSetup(true);
-      }
+  },()=>{/* Manual URL remains available if Firestore is unavailable. */}),[changeUrl]);
+  useEffect(()=>{
+    if(busy)return;
+    let cancelled=false;
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),8000);
+    setConnection('checking');
+    apiRequest(apiUrl,'/capabilities',undefined,{signal:controller.signal}).then(data=>{
+      if(!cancelled)setConnection(data.api_version===2?'connected':'incompatible');
+    }).catch(()=>{if(!cancelled)setConnection('offline');});
+    return ()=>{cancelled=true;clearTimeout(timeout);controller.abort();};
+  },[apiUrl,busy]);
+  // Local state owns the displayed image. Send its bytes, never a global "last upload".
+  // PNG returned by /upload is canonical, so region hashes match later requests.
+  const run=async(label,work)=>{
+    if(lock.current)return null;
+    lock.current=true;setBusy(label);
+    const controller=new AbortController();pending.current=controller;
+    const sourceRevision=revision.current, base=activeUrl.current;
+    const request=(path,body)=>apiRequest(base,path,body,{signal:controller.signal});
+    try {
+      const result=await work(request);
+      if(result?.image !== undefined) imageSource(result.image,result.mime_type);
+      if(controller.signal.aborted || sourceRevision!==revision.current || base!==activeUrl.current)return null;
+      return result;
+    } catch(e) {
+      if(e.name!=='AbortError')toast(e.message || 'Operation failed.','error',6500);
+      return null;
+    } finally {if(pending.current===controller)pending.current=null;lock.current=false;setBusy('');}
+  };
+  const commit=(data,label)=>{
+    const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label};
+    setBefore(current);setCurrent(next);
+    setHistory(h=>[{...next,id:Date.now()+Math.random()},...h].slice(0,8));
+    invalidate();
+    if(data.warning)toast(data.warning,'info',7000);
+    else toast('Changes applied.','success');
+  };
+  const upload=async file=>{
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)){toast('Choose JPG, PNG or WEBP.','error');return;}
+    if(file.size>24*1024*1024){toast('Choose an image smaller than 24 MB.','error');return;}
+    const data=await run('Uploading room…',request=>{const form=new FormData();form.append('image',file);return request('/upload',form);});
+    if(data){const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label:'original'};
+      setCurrent(next);setOriginal(next);setBefore(null);setHistory([]);invalidate();}
+  };
+  const apply=async(path,fields,label)=>{
+    if(!current)return;
+    const data=await run('Applying your changes…',request=>request(path,{image:current.image,model:genModel,...fields}));
+    if(data)commit(data,label);
+  };
+  const addObject=async(objectImage,prompt)=>{
+    if(!current)return;
+    const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt,model:genModel}));
+    if(data)commit(data,'add_object');
+  };
+  const detect=async()=>{
+    const data=await run('Finding objects and surfaces…',request=>request('/detect-objects',{image:current.image}));
+    if(data){setRegions(data.regions || []);setSelection(null);if(!data.regions?.length)toast('No areas found. Try clicking an area or drawing a rectangle.','info');}
+  };
+  const point=async coordinates=>{
+    const data=await run('Finding the selected area…',request=>request('/segment-point',{image:current.image,point:coordinates}));
+    if(data){setRegions(r=>[...r,{id:data.region_id,label:'Selected area',mask:data.mask,bbox:[0,0,1,1]}]);setSelection({region_id:data.region_id});}
+  };
+  const undo=()=>{if(!before || lock.current)return;setCurrent(before);setBefore(null);invalidate();};
+  const reset=()=>{if(lock.current)return;download.current=null;setCurrent(null);setOriginal(null);setBefore(null);setHistory([]);invalidate();};
+  useEffect(()=>{
+    const handler=e=>{
+      if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable)return;
+      if(e.key==='Escape')setShowHistory(false);
+      if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}
+      if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();download.current?.();}
+      if((e.ctrlKey||e.metaKey)&&e.key==='h'){e.preventDefault();setShowHistory(v=>!v);}
     };
-
-    checkHealth();
-    const interval = setInterval(checkHealth, 30000);
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiUrl]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e) => {
-      const tag = document.activeElement?.tagName;
-      const isTyping = tag === "INPUT" || tag === "TEXTAREA";
-
-      if (e.key === "Escape") {
-        setShowHistory(false);
-        setShowShortcuts(false);
-        return;
-      }
-
-      if (e.key === "?" && !isTyping && !e.ctrlKey && !e.metaKey) {
-        setShowShortcuts(p => !p);
-        return;
-      }
-
-      if ((e.ctrlKey || e.metaKey) && !isTyping) {
-        if (e.key === "z") {
-          e.preventDefault();
-          if (previousImageRef.current) {
-            handleUndoKb();
-          } else {
-            toast("Nothing to undo", "info", 2000);
-          }
-        }
-        if (e.key === "h") {
-          e.preventDefault();
-          setShowHistory(p => !p);
-        }
-        if (e.key === "d" && generatedImageRef.current) {
-          e.preventDefault();
-          downloadRef.current?.();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const registerDownload = useCallback((fn) => {
-    downloadRef.current = fn;
-  }, []);
-
-  if (!authChecked) return null;
-  if (!user) return <Auth onLogin={setUser} />;
-
-  const handleUpload = (imageData) => {
-    setUploadedImage(imageData);
-    setStep("style");
-    toast("Photo uploaded — choose your style!", "success");
-  };
-
-  const handleGenerate = async (style, previewImage = null, palette = null, customPrompt = null) => {
-    setSelectedStyle(customPrompt ? "custom" : style);
-    setLoading(true);
-    setLoadingStep(0);
-    setLoadingProgress(0);
-
-    if (previewImage) {
-      setGeneratedImage(previewImage);
-      setStep("result");
-    }
-
-    try {
-      setLoadingStep(1); setLoadingProgress(10);
-      await new Promise(r => setTimeout(r, 500));
-
-      setLoadingStep(2); setLoadingProgress(20);
-      await new Promise(r => setTimeout(r, 500));
-
-      setLoadingStep(3); setLoadingProgress(30);
-
-      const res = await fetch(`${apiUrl}/generate`, {
-        method: "POST",
-        headers: apiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ style, palette, customPrompt, model: genModel }),
-      });
-
-      setLoadingStep(4); setLoadingProgress(60);
-
-      const genContentType = res.headers.get("content-type") || "";
-      if (!res.ok || !genContentType.includes("application/json")) {
-        const failure = genContentType.includes("application/json") ? await res.json() : null;
-        const message = failure?.error === "No AI backend connected. Start Colab or set REPLICATE_API_TOKEN."
-          ? "Flask is running, but no AI notebook is connected. Connect your running notebook before generating."
-          : (typeof failure?.error === "string" ? failure.error : `Backend returned HTTP ${res.status} without a valid JSON response. Check the backend URL.`);
-        toast(message, "error", 10000);
-        return;
-      }
-
-      const data = await res.json();
-
-      if (data.image) {
-        setLoadingStep(5); setLoadingProgress(80);
-        const imgSrc = "data:image/jpeg;base64," + data.image;
-        setGeneratedImage(imgSrc);
-
-        setHistory(prev => [{
-          id: Date.now(),
-          image: imgSrc,
-          original: uploadedImage,
-          style: customPrompt ? "custom" : style,
-          time: new Date().toLocaleTimeString(),
-        }, ...prev]);
-
-        setLoadingStep(6); setLoadingProgress(90);
-        if (!previewImage) setStep("result");
-
-        try {
-          const detectRes = await fetch(`${apiUrl}/detect-objects`, {
-            method: "POST",
-            headers: apiHeaders({ "Content-Type": "application/json" }),
-            body: JSON.stringify({}),
-          });
-          const detectContentType = detectRes.headers.get("content-type") || "";
-          if (detectRes.ok && detectContentType.includes("application/json")) {
-            const detectData = await detectRes.json();
-            setDetectedObjects(detectData.objects || []);
-          }
-        } catch {
-          // object detection is best-effort, don't block the result
-        }
-
-        setLoadingStep(7); setLoadingProgress(100);
-        await new Promise(r => setTimeout(r, 400));
-        setStep("result");
-
-        toast(`${customPrompt ? "Custom style" : style.replace(/_/g, " ")} applied!`, "success");
-      } else {
-        toast(data.error || "Generation failed", "error");
-      }
-    } catch (err) {
-      toast("Generation failed — is the backend running?", "error");
-    } finally {
-      setLoading(false);
-      setLoadingStep(0);
-      setLoadingProgress(0);
-    }
-  };
-
-  const handleEdit = async (object, prompt) => {
-    setLoading(true);
-    setLoadingStep(0);
-    setLoadingProgress(0);
-    setPreviousImage(generatedImage);
-
-    try {
-      setLoadingStep(1); setLoadingProgress(15);
-      await new Promise(r => setTimeout(r, 400));
-
-      setLoadingStep(2); setLoadingProgress(35);
-
-      const res = await fetch(`${apiUrl}/edit-object`, {
-        method: "POST",
-        headers: apiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ object, prompt, model: genModel }),
-      });
-
-      setLoadingStep(3); setLoadingProgress(70);
-
-      const editContentType = res.headers.get("content-type") || "";
-      if (!res.ok || !editContentType.includes("application/json")) {
-        toast("Edit failed on Colab — make sure all model cells ran successfully.", "error", 6000);
-        return;
-      }
-
-      const data = await res.json();
-
-      if (data.image) {
-        setLoadingStep(4); setLoadingProgress(100);
-        await new Promise(r => setTimeout(r, 400));
-        const imgSrc = "data:image/jpeg;base64," + data.image;
-        setEditedImage(imgSrc);
-        setGeneratedImage(imgSrc);
-        setStep("edit");
-        toast(`${object} edited successfully`, "success");
-      } else {
-        toast(data.error || "Edit failed", "error");
-      }
-    } catch (err) {
-      toast("Edit failed — check backend connection", "error");
-    } finally {
-      setLoading(false);
-      setLoadingStep(0);
-      setLoadingProgress(0);
-    }
-  };
-
-  const handleDelete = async (object) => {
-    setLoading(true);
-    setLoadingStep(0);
-    setLoadingProgress(0);
-    setPreviousImage(generatedImage);
-
-    try {
-      setLoadingStep(1); setLoadingProgress(15);
-      await new Promise(r => setTimeout(r, 400));
-
-      setLoadingStep(2); setLoadingProgress(35);
-
-      const res = await fetch(`${apiUrl}/delete-object`, {
-        method: "POST",
-        headers: apiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ object, model: genModel }),
-      });
-
-      setLoadingStep(3); setLoadingProgress(70);
-
-      const deleteContentType = res.headers.get("content-type") || "";
-      if (!res.ok || !deleteContentType.includes("application/json")) {
-        toast("Delete failed on Colab — make sure all model cells ran successfully.", "error", 6000);
-        return;
-      }
-
-      const data = await res.json();
-
-      if (data.image) {
-        setLoadingStep(4); setLoadingProgress(100);
-        await new Promise(r => setTimeout(r, 400));
-        const imgSrc = "data:image/jpeg;base64," + data.image;
-        setEditedImage(imgSrc);
-        setGeneratedImage(imgSrc);
-        setStep("edit");
-        toast(`${object} removed successfully`, "success");
-      } else {
-        toast(data.error || "Delete failed", "error");
-      }
-    } catch (err) {
-      toast("Delete failed — check backend connection", "error");
-    } finally {
-      setLoading(false);
-      setLoadingStep(0);
-      setLoadingProgress(0);
-    }
-  };
-
-  const handleFurnish = async (prompt) => {
-    setLoading(true);
-    setLoadingStep(0);
-    setLoadingProgress(0);
-  
-    try {
-      setLoadingStep(1);
-      setLoadingProgress(20);
-  
-      const res = await fetch(`${apiUrl}/furnish-room`, {
-        method: "POST",
-        headers: apiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          image: stripDataUrlPrefix(uploadedImage),
-          prompt: prompt,
-          model: genModel,
-        }),
-      });
-
-      setLoadingStep(2);
-      setLoadingProgress(70);
-
-      const contentType = res.headers.get("content-type") || "";
-
-      if (!res.ok || !contentType.includes("application/json")) {
-        toast(
-          "Furnish failed — check backend connection.",
-          "error",
-          6000
-        );
-        return;
-      }
-
-      const data = await res.json();
-
-      if (data.image) {
-        const imgSrc = "data:image/jpeg;base64," + data.image;
-
-        setGeneratedImage(imgSrc);
-        setSelectedStyle("furnished");
-        setStep("result");
-
-        toast(
-          "Room furnished successfully!",
-          "success"
-        );
-      } else {
-        toast(data.error || "Furnish failed", "error");
-      }
-
-    } catch (err) {
-      toast(
-        "Furnish failed — check backend connection.",
-        "error"
-      );
-    } finally {
-      setLoading(false);
-      setLoadingStep(0);
-      setLoadingProgress(0);
-    }
-  };
-
-  const handleAddObject = async (objectImageDataUrl, placementPrompt) => {
-    setLoading(true);
-    setLoadingStep(0);
-    setLoadingProgress(0);
-
-    try {
-      setLoadingStep(1);
-      setLoadingProgress(20);
-
-      const res = await fetch(`${apiUrl}/add-object`, {
-        method: "POST",
-        headers: apiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          room_image: stripDataUrlPrefix(generatedImage || uploadedImage),
-          object_image: stripDataUrlPrefix(objectImageDataUrl),
-          prompt: placementPrompt,
-          model: genModel,
-        }),
-      });
-
-      setLoadingStep(2);
-      setLoadingProgress(70);
-
-      const contentType = res.headers.get("content-type") || "";
-
-      if (!res.ok || !contentType.includes("application/json")) {
-        toast("Add object failed — check backend connection.", "error", 6000);
-        return;
-      }
-
-      const data = await res.json();
-
-      if (data.image) {
-        const imgSrc = "data:image/jpeg;base64," + data.image;
-
-        setGeneratedImage(imgSrc);
-        setSelectedStyle("furnished");
-        setStep("result");
-
-        toast("Item added to your room!", "success");
-      } else {
-        toast(data.error || "Add object failed", "error");
-      }
-    } catch (err) {
-      toast("Add object failed — check backend connection.", "error");
-    } finally {
-      setLoading(false);
-      setLoadingStep(0);
-      setLoadingProgress(0);
-    }
-  };
-  
-  const handleUndo = () => {
-    if (previousImage) {
-      setGeneratedImage(previousImage);
-      setEditedImage(previousImage);
-      setPreviousImage(null);
-      setStep("result");
-      toast("Edit undone", "info", 2000);
-    }
-  };
-
-  const handleUndoKb = () => {
-    const prev = previousImageRef.current;
-    if (prev) {
-      setGeneratedImage(prev);
-      setEditedImage(prev);
-      setPreviousImage(null);
-      setStep("result");
-      toast("Edit undone", "info", 2000);
-    }
-  };
-
-  const handleReset = () => {
-    setStep("upload");
-    setUploadedImage(null);
-    setSelectedStyle(null);
-    setGeneratedImage(null);
-    setDetectedObjects([]);
-    setEditedImage(null);
-    setPreviousImage(null);
-  };
-
-  const handleBackendConnect = (url, healthData) => {
-    setApiUrl(url);
-    if (healthData) {
-      setConnectionStatus(healthData.colab_connected ? "full" : "partial");
-    }
-    setShowBackendSetup(false);
-    toast(`Connected to ${url}`, "success", 3000);
-  };
-
-  const connLabel = { checking: "Checking", full: "Live", partial: "Partial", offline: "Offline" };
-  const connTip = {
-    checking: "Checking connection...",
-    full: "Flask + Colab connected",
-    partial: "Flask running — Colab not connected",
-    offline: "Click to configure backend URL",
-  };
-
-  return (
-    <div className="app">
-      {/* Backend setup modal */}
-      {showBackendSetup && (
-        <BackendSetup onConnect={handleBackendConnect} />
-      )}
-
-      {/* Ambient background orbs */}
-      <div className="ambient-bg" aria-hidden="true">
-        <div className="orb orb-1" />
-        <div className="orb orb-2" />
-        <div className="orb orb-3" />
+    window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);
+    // Handler intentionally follows the currently available undo snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[before]);
+  const registerDownload=useCallback(fn=>{download.current=fn;},[]);
+  if(!authChecked)return null;
+  if(!user)return <Auth onLogin={()=>{}} />;
+  return <div className="app">
+    {setup && <BackendSetup onConnect={url=>{changeUrl(url);setSetup(false);}} />}
+    <div className="ambient-bg" aria-hidden="true"><div className="orb orb-1"/><div className="orb orb-2"/></div>
+    <header className="header"><div className="header-inner">
+      <button className="logo" disabled={!!busy} onClick={reset}><span className="logo-text">Interior<em>AI</em></span></button>
+      <div className="user-info"><button disabled={!!busy} onClick={()=>setSetup(true)}>Connection: {connection}</button>
+      <div className="model-toggle" role="group" aria-label="Generation quality">
+        <button aria-pressed={genModel==='fast'} disabled={!!busy} onClick={()=>changeModel('fast')} title="SD1.5 — quicker">Fast</button>
+        <button aria-pressed={genModel==='quality'} disabled={!!busy} onClick={()=>changeModel('quality')} title="SDXL — slower, more photorealistic">Quality</button>
       </div>
-
-      <header className="header">
-        <div className="header-inner">
-          <div className="logo" onClick={handleReset}>
-            <span className="logo-icon">◈</span>
-            <span className="logo-text">Interior<em>AI</em></span>
-          </div>
-
-          <div className="step-indicators">
-            {["Upload", "Style", "Result", "Edit"].map((s, i) => (
-              <div
-                key={s}
-                className={`step-dot ${STEPS[i] === step ? "active" : ""} ${STEPS.indexOf(step) > i ? "done" : ""}`}
-              >
-                <span className="step-num">{STEPS.indexOf(step) > i ? "✓" : i + 1}</span>
-                <span className="step-label">{s}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="user-info">
-            {/* Fast (SD1.5) vs Quality (SDXL) — only affects the Colab backend,
-                which keeps both models available and swaps on demand. */}
-            <div
-              className="gen-model-toggle"
-              title="Fast = SD1.5 (quick, lower quality). Quality = SDXL (slower, much better). Only matters when connected via Colab."
-              style={{ display: "flex", gap: 4, marginRight: 10 }}
-            >
-              {["fast", "quality"].map(m => (
-                <button
-                  key={m}
-                  onClick={() => setGenModel(m)}
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: 6,
-                    fontSize: 11,
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                    cursor: "pointer",
-                    border: genModel === m ? "1px solid var(--gold)" : "1px solid var(--border)",
-                    background: genModel === m ? "rgba(201, 168, 76, 0.12)" : "transparent",
-                    color: genModel === m ? "var(--gold)" : "var(--text-muted)",
-                  }}
-                >
-                  {m === "fast" ? "⚡ Fast" : "✦ Quality"}
-                </button>
-              ))}
-            </div>
-
-            {/* Connection status */}
-            <div
-              className={`conn-status conn-${connectionStatus}`}
-              title={connTip[connectionStatus]}
-              onClick={() => setShowBackendSetup(true)}
-              style={{ cursor: "pointer" }}
-            >
-              <span className="conn-dot" />
-              <span className="conn-label">{connLabel[connectionStatus]}</span>
-            </div>
-
-            {history.length > 0 && (
-              <button className="history-btn" onClick={() => setShowHistory(true)}>
-                ◷ History ({history.length})
-              </button>
-            )}
-
-            {/* Keyboard shortcuts hint */}
-            <button
-              className="shortcuts-hint-btn"
-              onClick={() => setShowShortcuts(true)}
-              title="Keyboard shortcuts (?)"
-            >
-              ⌨
-            </button>
-
-            {user.photoURL && (
-              <img src={user.photoURL} alt="Profile" className="user-avatar" />
-            )}
-            <span className="user-name">{user.displayName || user.email}</span>
-            <button className="logout-btn" onClick={() => signOut(auth)}>
-              Sign Out
-            </button>
-          </div>
+      <button disabled={!!busy || !history.length} onClick={()=>setShowHistory(v=>!v)}>History ({history.length})</button>
+      <span className="user-name">{user.displayName || user.email}</span><button disabled={!!busy} onClick={()=>signOut(auth)}>Sign Out</button></div>
+    </div></header>
+    <main className="main">
+      {connection==='incompatible' && <p role="alert">Connect the API v2 notebook before editing.</p>}
+      {busy && <div className="operation-status" role="status" aria-live="polite">{busy} Please keep this page open.</div>}
+      {!current?<><div className="page-header"><h1>Transform Your Space</h1><p>Start with your room photo.</p></div><Upload onUpload={upload} busy={!!busy}/></>:<>
+        <div className="page-header"><h1>Your Room Workspace</h1><p>Every tool uses the current image. Undo restores the previous result.</p></div>
+        <div className="tool-actions"><button disabled={!!busy} onClick={reset}>Upload another photo</button>
+          <button disabled={!!busy || !before} onClick={undo}>Undo last change</button>
+          <button disabled={!!busy || current===original} onClick={()=>{setBefore(current);setCurrent(original);invalidate();}}>Restore original</button></div>
+        <nav className="operation-tabs" aria-label="Room tools">{TOOLS.map(([id,label])=><button key={id} disabled={!!busy} aria-pressed={tool===id}
+          onClick={()=>{setTool(id);setSelection(null);}}>{label}</button>)}</nav>
+        <div ref={toolPanel} key={`${version}-${tool}`}>
+          {tool==='style' && <><img className="current-room" src={current.image} alt="Current room"/>
+            <StyleSelector image={current.image} busy={!!busy} onGenerate={fields=>apply('/generate',fields,fields.style || 'custom_style')}
+              onPreview={(style,palette)=>run('Generating one style preview…',request=>request('/preview-styles',{image:current.image,styles:[style],palette,model:genModel}))}
+              onUsePreview={(image,style)=>{if(!lock.current)commit({image},style);}}/></>}
+          {tool==='furnish' && <FurnishRoom image={current.image} busy={!!busy} selection={selection} onSelect={setSelection}
+            onFurnish={prompt=>apply('/furnish-room',{prompt,selection},'furnish')}/>}
+          {tool==='object' && <ObjectEditor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
+            onDetect={detect} onPoint={point} onEdit={(action,prompt)=>apply(action==='delete'?'/delete-object':'/edit-object',{selection,prompt},action)}/>}
+          {tool==='addobject' && <AddObjectFromPhoto busy={!!busy} onAdd={addObject}/>}
         </div>
-      </header>
-
-      {/* History Panel */}
-      <AnimatePresence>
-        {showHistory && (
-          <>
-            <motion.div
-              className="history-overlay"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowHistory(false)}
-            />
-            <motion.div
-              className="history-panel"
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            >
-              <div className="history-header">
-                <h2>Generation History</h2>
-                <button className="history-close" onClick={() => setShowHistory(false)}>✕</button>
-              </div>
-              <div className="history-list">
-                {history.map((item) => (
-                  <motion.div
-                    key={item.id}
-                    className="history-item"
-                    whileHover={{ x: -4 }}
-                    onClick={() => {
-                      setGeneratedImage(item.image);
-                      setUploadedImage(item.original);
-                      setSelectedStyle(item.style);
-                      setStep("result");
-                      setShowHistory(false);
-                      toast("Design restored from history", "info", 2000);
-                    }}
-                  >
-                    <div className="history-thumb">
-                      <img src={item.image} alt={item.style} />
-                    </div>
-                    <div className="history-info">
-                      <p className="history-style">
-                        {item.style.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
-                      </p>
-                      <p className="history-time">{item.time}</p>
-                    </div>
-                    <span className="history-arrow">→</span>
-                  </motion.div>
-                ))}
-              </div>
-              {history.length > 0 && (
-                <div className="history-footer">
-                  <button
-                    className="clear-history-btn"
-                    onClick={() => {
-                      setHistory([]);
-                      localStorage.removeItem("interiorai_history");
-                      setShowHistory(false);
-                      toast("History cleared", "info", 2000);
-                    }}
-                  >
-                    Clear History
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Keyboard Shortcuts Modal */}
-      <AnimatePresence>
-        {showShortcuts && (
-          <motion.div
-            className="shortcuts-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setShowShortcuts(false)}
-          >
-            <motion.div
-              className="shortcuts-modal"
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{ type: "spring", damping: 22, stiffness: 250 }}
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="shortcuts-header">
-                <span className="shortcuts-icon">⌨</span>
-                <h3>Keyboard Shortcuts</h3>
-                <button className="shortcuts-close" onClick={() => setShowShortcuts(false)}>✕</button>
-              </div>
-              <div className="shortcuts-list">
-                {SHORTCUTS.map(s => (
-                  <div className="shortcut-row" key={s.key}>
-                    <kbd className="shortcut-key">{s.key}</kbd>
-                    <span className="shortcut-desc">{s.desc}</span>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Loading Overlay */}
-      <AnimatePresence>
-        {loading && (
-          <motion.div
-            className="loading-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="loading-content">
-              <div className="loading-ring-wrap">
-                <div className="loading-ring" />
-                <div className="loading-logo-inner">◈</div>
-              </div>
-              <h2 className="loading-title">
-                {loadingStep <= 3 ? "Generating Your Design" :
-                  loadingStep <= 5 ? "Finalizing Image" : "Almost Ready"}
-              </h2>
-
-              <div className="loading-bar-wrap">
-                <motion.div
-                  className="loading-bar-fill"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${loadingProgress}%` }}
-                  transition={{ duration: 0.5, ease: "easeOut" }}
-                />
-                <motion.div
-                  className="loading-bar-glow"
-                  animate={{ opacity: [0.6, 1, 0.6] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                  style={{ width: `${loadingProgress}%` }}
-                />
-              </div>
-              <span className="loading-percent">{loadingProgress}%</span>
-
-              <div className="loading-steps">
-                {[
-                  "Preparing image",
-                  "Analyzing structure",
-                  "Edge detection",
-                  "Running Stable Diffusion",
-                  "Applying ControlNet",
-                  "Finalizing",
-                  "Detecting objects",
-                ].map((label, i) => (
-                  <motion.div
-                    key={i}
-                    className={`loading-step-item ${loadingStep > i + 1 ? "done" : loadingStep === i + 1 ? "active" : ""}`}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                  >
-                    <span className="loading-step-dot">
-                      {loadingStep > i + 1 ? "✓" : loadingStep === i + 1 ? "●" : "○"}
-                    </span>
-                    <span className="loading-step-label">{label}</span>
-                  </motion.div>
-                ))}
-              </div>
-
-              <p className="loading-sub">Powered by Stable Diffusion + ControlNet</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Main Content */}
-      <main className="main">
-        <AnimatePresence mode="wait">
-          {step === "upload" && (
-            <motion.div
-              key="upload"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.5 }}
-            >
-              <div className="page-header">
-                <motion.div
-                  className="page-badge"
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                >
-                  ✦ AI-Powered Interior Design
-                </motion.div>
-                <h1>Transform Your Space</h1>
-                <p>Upload a room photo and watch AI reimagine it in any design style</p>
-              </div>
-              <Upload onUpload={handleUpload} />
-            </motion.div>
-          )}
-
-          {step === "style" && (
-            <motion.div
-              key="style"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.5 }}
-            >
-              <div className="page-header">
-                <h1>Choose Your Style</h1>
-                <p>Select a design aesthetic to transform your room</p>
-              </div>
-              <StyleSelector uploadedImage={uploadedImage} onGenerate={handleGenerate} />
-              <FurnishRoom uploadedImage={uploadedImage} onFurnish={handleFurnish} onAddObject={handleAddObject}/>
-            </motion.div>
-          )}
-
-          {(step === "result" || step === "edit") && (
-            <motion.div
-              key="result"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.5 }}
-            >
-              <div className="page-header">
-                <h1>Your Transformed Room</h1>
-                <p>
-                  {step === "edit"
-                    ? "Object replaced with precision using AI inpainting"
-                    : `${selectedStyle?.replace(/_/g, " ")} style applied — drag slider to compare`}
-                </p>
-              </div>
-              <ResultView
-                original={uploadedImage}
-                generated={step === "edit" ? editedImage : generatedImage}
-                style={selectedStyle}
-                onReset={handleReset}
-                onNewStyle={() => setStep("style")}
-                onUndo={handleUndo}
-                canUndo={!!previousImage}
-                onRegisterDownload={registerDownload}
-              />
-              {step === "result" && detectedObjects.length > 0 && (
-                <ObjectEditor objects={detectedObjects} onEdit={handleEdit} onDelete={handleDelete} />
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
-    </div>
-  );
+        {current!==original && <fieldset className="result-fieldset" disabled={!!busy}>
+          <ResultView original={original.image} key={version} generated={current.image} style={current.label} onReset={reset}
+            onNewStyle={()=>toolPanel.current?.scrollIntoView({behavior:'smooth'})} onUndo={undo} canUndo={!!before} onRegisterDownload={registerDownload}/>
+        </fieldset>}
+        {showHistory && <section className="tool-panel"><h2>Session history</h2><p>Up to eight results are kept in this session.</p><div className="tool-grid">
+          {history.map(item=><button disabled={!!busy} key={item.id} onClick={()=>{setBefore(current);setCurrent(item);invalidate();setShowHistory(false);}}>
+            <img className="history-image" src={item.image} alt={item.label}/><span>{item.label.replace(/_/g,' ')}</span></button>)}
+        </div><button disabled={!!busy} onClick={()=>{setHistory([]);setShowHistory(false);}}>Clear history</button></section>}
+      </>}
+    </main>
+  </div>;
 }
-
-export default function App() {
-  return (
-    <ToastProvider>
-      <AppInner />
-    </ToastProvider>
-  );
-}
+export default function App(){return <ToastProvider><AppInner/></ToastProvider>;}
