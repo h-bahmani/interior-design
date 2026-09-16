@@ -32,4 +32,10 @@
 .header .logo{background:none;border:0;color:inherit}.user-info{flex-wrap:wrap}
 .model-toggle{display:flex;gap:4px}.model-toggle button{padding:6px 12px;font-size:12px}
 .reference-preview{max-width:220px;max-height:220px;border-radius:10px;display:block;margin:0 auto}
+.style-gallery{margin:18px 0}
+.style-gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:14px}
+.style-gallery-item{padding:0;overflow:hidden;border-radius:10px;text-align:left}
+.style-gallery-item img{display:block;width:100%;aspect-ratio:1;object-fit:cover}
+.style-gallery-item span{display:block;padding:8px 10px;font-size:12px}
+.style-gallery-item.selected{border-color:#e6b846}
 @media(max-width:650px){.tool-panel{padding:14px}.header-inner{flex-wrap:wrap;gap:14px}.operation-tabs button{min-width:135px}.main{padding-left:12px;padding-right:12px}}

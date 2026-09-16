@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import ColorPaletteSelector from './ColorPaletteSelector';
 import StyleComparison from './StyleComparison';
+import StyleGallery from './StyleGallery';
 const STYLES = [
   { id: "minimalist", name: "Minimalist", desc: "Simple forms, clean lines, restrained details", emoji: "◻", color: "#e8e6df" },
   { id: "industrial", name: "Industrial", desc: "Raw concrete, metal, exposed brick", emoji: "⬡", color: "#8a7a6a" },
@@ -10,6 +11,14 @@ const STYLES = [
   { id: "midcentury_modern", name: "Mid-Century", desc: "Retro 1960s, teak, geometric", emoji: "◑", color: "#c4774a" },
   { id: "japanese_zen", name: "Japanese Zen", desc: "Wabi-sabi, tatami, bamboo peace", emoji: "⬤", color: "#8aa88e" },
   { id: "bohemian", name: "Bohemian", desc: "Woven textures and eclectic patterns", emoji: "✦", color: "#c47aad" },
+  { id: "art_deco", name: "Art Deco", desc: "Geometric glamour, brass, black lacquer", emoji: "◆", color: "#c9a84c" },
+  { id: "coastal", name: "Coastal", desc: "Whitewashed wood, linen, ocean light", emoji: "≈", color: "#a8c4d4" },
+  { id: "french_country", name: "French Country", desc: "Provincial toile, limewash, wrought iron", emoji: "✿", color: "#c4b8a8" },
+  { id: "farmhouse_rustic", name: "Rustic Farmhouse", desc: "Reclaimed barn wood, shiplap, cozy", emoji: "⌂", color: "#a68a68" },
+  { id: "contemporary_glam", name: "Contemporary Glam", desc: "Velvet, mirrors, Hollywood Regency", emoji: "✧", color: "#d4a8b8" },
+  { id: "dark_academia", name: "Dark Academia", desc: "Walnut library, leather, brass lamps", emoji: "❧", color: "#4a3a2a" },
+  { id: "tropical_modern", name: "Tropical Modern", desc: "Rattan, palms, breezy Bali resort", emoji: "❁", color: "#7a9b6a" },
+  { id: "brutalist", name: "Brutalist", desc: "Raw concrete, monolithic minimalism", emoji: "▦", color: "#6a6a6a" },
 ];
 
 const MODES = [
@@ -18,7 +27,7 @@ const MODES = [
   ["colors", "Colors Only"],
 ];
 
-export default function StyleSelector({ image, busy, onGenerate, onPreview, onUsePreview }) {
+export default function StyleSelector({ image, busy, onGenerate, onPreview, onUsePreview, onExploreAll }) {
   const [mode, setMode] = useState('preset');
   const [selected, setSelected] = useState('minimalist');
   const [prompt, setPrompt] = useState('');
@@ -37,13 +46,15 @@ export default function StyleSelector({ image, busy, onGenerate, onPreview, onUs
   };
 
   return <section className="tool-panel">
-    <h2>8 Design Styles</h2><p>Choose a style and optionally a color palette — or skip the style entirely and just change the colors.</p>
+    <h2>{STYLES.length} Design Styles</h2><p>Choose a style and optionally a color palette — or skip the style entirely and just change the colors.</p>
 
     <div className="tool-actions" role="group" aria-label="Style mode">
       {MODES.map(([id, label]) => <button key={id} disabled={busy} aria-pressed={mode === id} onClick={() => setMode(id)}>{label}</button>)}
     </div>
 
     {mode === 'preset' && <>
+      <StyleGallery styles={STYLES} busy={busy} palette={palette} selected={selected}
+        onExplore={onExploreAll} onSelectStyle={setSelected} />
       <div className="tool-grid">{STYLES.map(s => <button key={s.id} disabled={busy} aria-pressed={selected === s.id}
         className={selected === s.id ? 'selected' : ''} onClick={() => setSelected(s.id)}><strong>{s.emoji} {s.name}</strong><small>{s.desc}</small></button>)}</div>
       <label className="field-label">Extra details for this style (optional)
