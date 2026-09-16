@@ -2,10 +2,11 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import "./ObjectEditor.css";
 
-export default function ObjectEditor({ objects, onEdit, editedImage }) {
+export default function ObjectEditor({ objects, onEdit, onDelete, editedImage }) {
   const [selectedObject, setSelectedObject] = useState(null);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [editHistory, setEditHistory] = useState([]);
 
   const suggestions = {
@@ -30,6 +31,19 @@ export default function ObjectEditor({ objects, onEdit, editedImage }) {
       setSelectedObject(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedObject || !onDelete) return;
+    setDeleting(true);
+    try {
+      await onDelete(selectedObject);
+      setEditHistory(prev => [...prev, { object: selectedObject, prompt: "removed" }]);
+      setPrompt("");
+      setSelectedObject(null);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -125,12 +139,22 @@ export default function ObjectEditor({ objects, onEdit, editedImage }) {
               />
               <button
                 className="edit-submit-btn"
-                disabled={!prompt.trim() || loading}
+                disabled={!prompt.trim() || loading || deleting}
                 onClick={handleSubmit}
               >
                 {loading ? "Generating..." : "Apply →"}
               </button>
             </div>
+
+            {onDelete && (
+              <button
+                className="edit-delete-btn"
+                disabled={loading || deleting}
+                onClick={handleDelete}
+              >
+                {deleting ? "Removing..." : `✕ Remove this ${selectedObject}`}
+              </button>
+            )}
 
             <p className="edit-note">
               ◈ Only the {selectedObject} will change — everything else stays identical.

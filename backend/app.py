@@ -467,6 +467,49 @@ def edit_object():
 
     return jsonify({"error": "No AI backend connected. Start Colab or set REPLICATE_API_TOKEN."}), 503
 
+@app.route("/delete-object", methods=["POST"])
+def delete_object():
+    # New in the v2 Colab notebook — clean removal (background reconstruction
+    # in the selected area) rather than replacing the object with something
+    # else. No Gemini/OpenAI/Replicate equivalent exists, so Colab-only like
+    # furnish-room and add-object.
+    data = request.json or {}
+    object_label = data.get("object")
+    prompt = data.get("prompt", "")
+    model = data.get("model", "fast")
+
+    if not object_label:
+        return jsonify({"error": "object required"}), 400
+
+    edited_path = os.path.join(OUTPUT_FOLDER, "room_edited.jpg")
+    styled_path = os.path.join(OUTPUT_FOLDER, "room_styled.jpg")
+    base_path = edited_path if os.path.exists(edited_path) else styled_path
+
+    if not os.path.exists(base_path):
+        return jsonify({"error": "No styled image found — generate a style first"}), 400
+
+    if COLAB_URL["url"]:
+        image_b64 = image_to_base64(base_path)
+        try:
+            resp = requests.post(
+                f"{COLAB_URL['url']}/colab-delete",
+                json={"image": image_b64, "object": object_label, "prompt": prompt, "model": model},
+                headers=COLAB_HEADERS,
+                timeout=300,
+            )
+            result = resp.json()
+        except Exception as e:
+            return jsonify({"error": f"Colab request failed: {e}"}), 500
+
+        if "image" not in result:
+            return jsonify({"error": result.get("error", "Colab did not return an image"), "details": result}), 500
+
+        base64_to_image(result["image"], edited_path)
+        return jsonify({"message": "Delete complete", "object": object_label, "image": result["image"]})
+
+    return jsonify({"error": "Colab not connected — object deletion needs the Colab notebook."}), 503
+
+
 @app.route("/furnish-room", methods=["POST"])
 def furnish_room():
     data = request.json or {}
