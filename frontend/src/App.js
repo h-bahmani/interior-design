@@ -348,6 +348,54 @@ function AppInner() {
     }
   };
 
+  const handleDelete = async (object) => {
+    setLoading(true);
+    setLoadingStep(0);
+    setLoadingProgress(0);
+    setPreviousImage(generatedImage);
+
+    try {
+      setLoadingStep(1); setLoadingProgress(15);
+      await new Promise(r => setTimeout(r, 400));
+
+      setLoadingStep(2); setLoadingProgress(35);
+
+      const res = await fetch(`${apiUrl}/delete-object`, {
+        method: "POST",
+        headers: apiHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ object, model: genModel }),
+      });
+
+      setLoadingStep(3); setLoadingProgress(70);
+
+      const deleteContentType = res.headers.get("content-type") || "";
+      if (!res.ok || !deleteContentType.includes("application/json")) {
+        toast("Delete failed on Colab — make sure all model cells ran successfully.", "error", 6000);
+        return;
+      }
+
+      const data = await res.json();
+
+      if (data.image) {
+        setLoadingStep(4); setLoadingProgress(100);
+        await new Promise(r => setTimeout(r, 400));
+        const imgSrc = "data:image/jpeg;base64," + data.image;
+        setEditedImage(imgSrc);
+        setGeneratedImage(imgSrc);
+        setStep("edit");
+        toast(`${object} removed successfully`, "success");
+      } else {
+        toast(data.error || "Delete failed", "error");
+      }
+    } catch (err) {
+      toast("Delete failed — check backend connection", "error");
+    } finally {
+      setLoading(false);
+      setLoadingStep(0);
+      setLoadingProgress(0);
+    }
+  };
+
   const handleFurnish = async (prompt) => {
     setLoading(true);
     setLoadingStep(0);
@@ -852,7 +900,7 @@ function AppInner() {
                 onRegisterDownload={registerDownload}
               />
               {step === "result" && detectedObjects.length > 0 && (
-                <ObjectEditor objects={detectedObjects} onEdit={handleEdit} />
+                <ObjectEditor objects={detectedObjects} onEdit={handleEdit} onDelete={handleDelete} />
               )}
             </motion.div>
           )}
