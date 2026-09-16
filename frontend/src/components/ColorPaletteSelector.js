@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './ColorPaletteSelector.css';
 
 const PRESET_PALETTES = [
@@ -12,32 +12,38 @@ const PRESET_PALETTES = [
   { id: "coastal_fresh", name: "Coastal Fresh", desc: "Ocean blue, sandy white, driftwood", colors: ["#4A8BA8", "#F5F0E0", "#C4A87A", "#7AB8D0", "#8B7355"] },
 ];
 
+// No separate "confirm" step — every change here takes effect immediately.
+// (There used to be a "Use this palette" button; picking a card without
+// pressing it looked selected but silently sent no palette at all — fatal
+// once Colors Only mode came to depend on a palette actually being set.)
 export default function ColorPaletteSelector({ busy, onPaletteChange }) {
-  const [mode, setMode] = useState('preset');
+  const [mode, setMode] = useState('none'); // none | preset | custom
   const [preset, setPreset] = useState(PRESET_PALETTES[0].id);
   const [colors, setColors] = useState(['#D0B090', '#607060', '#EEE8DD']);
   const [prompt, setPrompt] = useState('');
   const chosen = PRESET_PALETTES.find(p => p.id === preset);
 
+  useEffect(() => {
+    if (mode === 'none') return onPaletteChange(null);
+    if (mode === 'preset') return onPaletteChange({ name: chosen.name, colors: chosen.colors, prompt: chosen.desc });
+    onPaletteChange({ name: 'Custom Palette', colors, prompt: prompt.trim() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, preset, colors, prompt]);
+
   const addColor = () => colors.length < 5 && setColors(c => [...c, '#B0A090']);
   const removeColor = i => colors.length > 2 && setColors(c => c.filter((_, k) => k !== i));
-
-  const apply = () => onPaletteChange(
-    mode === 'preset'
-      ? { name: chosen.name, colors: chosen.colors, prompt: chosen.desc }
-      : { name: 'Custom Palette', colors, prompt: prompt.trim() }
-  );
 
   return <section className="tool-panel">
     <h2>Color Palettes</h2>
     <p>Change the room's color theme independently of its design style. Generated colors are approximate.</p>
 
     <div className="cps-tabs">
+      <button className={`cps-tab ${mode === 'none' ? 'active' : ''}`} aria-pressed={mode === 'none'} disabled={busy} onClick={() => setMode('none')}>No palette</button>
       <button className={`cps-tab ${mode === 'preset' ? 'active' : ''}`} aria-pressed={mode === 'preset'} disabled={busy} onClick={() => setMode('preset')}>Preset palettes</button>
       <button className={`cps-tab ${mode === 'custom' ? 'active' : ''}`} aria-pressed={mode === 'custom'} disabled={busy} onClick={() => setMode('custom')}>Custom palette</button>
     </div>
 
-    {mode === 'preset' ? (
+    {mode === 'preset' && (
       <div className="cps-presets">
         {PRESET_PALETTES.map(p => (
           <button type="button" key={p.id} className={`cps-preset-item ${preset === p.id ? 'selected' : ''}`}
@@ -53,7 +59,9 @@ export default function ColorPaletteSelector({ busy, onPaletteChange }) {
           </button>
         ))}
       </div>
-    ) : (
+    )}
+
+    {mode === 'custom' && (
       <div className="cps-custom">
         <p className="cps-custom-label">Pick 2–5 colors for the room's palette</p>
         <div className="cps-custom-colors">
@@ -74,7 +82,5 @@ export default function ColorPaletteSelector({ busy, onPaletteChange }) {
         </label>
       </div>
     )}
-
-    <button className="primary-action" disabled={busy} onClick={apply}>Use this palette with style</button>
   </section>;
 }
