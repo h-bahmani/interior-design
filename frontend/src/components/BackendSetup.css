@@ -171,16 +171,6 @@
   margin-bottom: 8px;
 }
 
-.bsetup-label {
-  display: block;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: #777;
-  margin-bottom: 5px;
-}
-
 .bsetup-input {
   width: 100%;
   padding: 12px 44px 12px 14px;

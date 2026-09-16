@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
 import "./ResultView.css";
-import StyleComparison from "./StyleComparison";
+
 
 
 export default function ResultView({ original, generated, style, onReset, onNewStyle, onUndo, canUndo, onRegisterDownload }) {
@@ -44,6 +44,12 @@ export default function ResultView({ original, generated, style, onReset, onNewS
     return () => canvas.removeEventListener("wheel", handleWheel);
   }, [zoomOpen]);
 
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setZoomScale(prev => Math.min(Math.max(prev * delta, 1), 5));
+  };
+
   const handleMouseDown = (e) => {
     if (zoomScale <= 1) return;
     setIsDragging(true);
@@ -67,45 +73,10 @@ export default function ResultView({ original, generated, style, onReset, onNewS
   };
 
   const handleDownload = () => {
-    const canvas = document.createElement("canvas");
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-
-      // Draw image
-      ctx.drawImage(img, 0, 0);
-
-      // Add watermark bar at bottom
-      const barHeight = 36;
-      ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
-      ctx.fillRect(0, canvas.height - barHeight, canvas.width, barHeight);
-
-      // Style name text
-      ctx.fillStyle = "rgba(201, 168, 76, 0.9)";
-      ctx.font = "bold 13px sans-serif";
-      ctx.letterSpacing = "2px";
-      const styleName = style.replace(/_/g, " ").toUpperCase();
-      ctx.fillText(`InteriorAI — ${styleName}`, 14, canvas.height - 12);
-
-      // Date text on right
-      ctx.fillStyle = "rgba(255,255,255,0.4)";
-      ctx.font = "11px sans-serif";
-      const date = new Date().toLocaleDateString("en-US", {
-        month: "short", day: "numeric", year: "numeric"
-      });
-      const dateWidth = ctx.measureText(date).width;
-      ctx.fillText(date, canvas.width - dateWidth - 14, canvas.height - 12);
-
-      // Download
-      const link = document.createElement("a");
-      link.href = canvas.toDataURL("image/jpeg", 0.95);
-      link.download = `InteriorAI-${style}-${Date.now()}.jpg`;
-      link.click();
-    };
-    img.src = generated;
+    const link = document.createElement('a');
+    link.href = generated;
+    link.download = `InteriorAI-${style}-${Date.now()}.png`;
+    link.click();
   };
 
   const handleCopyImage = async () => {
@@ -148,14 +119,14 @@ export default function ResultView({ original, generated, style, onReset, onNewS
             <ReactCompareSliderImage
               src={original}
               alt="Original"
-              style={{ objectFit: "cover" }}
+              style={{ objectFit: "contain" }}
             />
           }
           itemTwo={
             <ReactCompareSliderImage
               src={generated}
               alt="Generated"
-              style={{ objectFit: "cover" }}
+              style={{ objectFit: "contain" }}
             />
           }
           style={{
@@ -192,7 +163,7 @@ export default function ResultView({ original, generated, style, onReset, onNewS
           ↓ Download Result
         </button>
         <button className="result-btn secondary" onClick={onNewStyle}>
-          ↺ Try Another Style
+          ↺ Choose Another Tool
         </button>
         <button className="result-btn secondary" onClick={onReset}>
           + New Photo
@@ -205,42 +176,8 @@ export default function ResultView({ original, generated, style, onReset, onNewS
         </button>
       </motion.div>
 
-      <p className="result-scroll-hint">
-        ✦ Scroll down to edit individual objects in this room
-      </p>
-
-      <StyleComparison
-        original={original}
-        currentImage={generated}
-        currentStyle={style}
-      />
-
-      <motion.div
-        className="result-actions"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-      >
-        <button className="result-btn primary" onClick={handleDownload}>
-          ↓ Download Result
-        </button>
-        <button className="result-btn secondary" onClick={onNewStyle}>
-          ↺ Try Another Style
-        </button>
-        {canUndo && (
-          <motion.button
-            className="result-btn undo"
-            onClick={onUndo}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-          >
-            ⟵ Undo Last Edit
-          </motion.button>
-        )}
-        <button className="result-btn secondary" onClick={onReset}>
-          + New Photo
-        </button>
-      </motion.div>
+      {canUndo && <button className="result-btn secondary" onClick={onUndo}>Undo last change</button>}
+      <p className="result-scroll-hint">Choose a tool above to continue editing the current image.</p>
 
       <AnimatePresence>
   {showShare && (

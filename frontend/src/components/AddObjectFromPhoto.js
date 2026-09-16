@@ -1,0 +1,32 @@
+import { useRef, useState } from 'react';
+
+// Not part of the v2 rewrite — IP-Adapter based, places the exact item from a
+// reference photo into the room instead of a text description of it.
+export default function AddObjectFromPhoto({ busy, onAdd }) {
+  const input = useRef(null);
+  const [objectImage, setObjectImage] = useState(null);
+  const [prompt, setPrompt] = useState('');
+
+  const choose = file => {
+    if (!file || busy || !['image/jpeg','image/png','image/webp'].includes(file.type)) return;
+    const reader = new FileReader();
+    reader.onload = () => setObjectImage(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  return <section className="tool-panel">
+    <h2>Add Object From Photo</h2>
+    <p>Upload a photo of a specific item — a chair, a lamp, a rug — and it gets placed into your room as that exact item, not a text description of one.</p>
+    <button className="upload-zone" disabled={busy} onClick={() => input.current.click()}
+      onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); choose(e.dataTransfer.files[0]); }}>
+      {objectImage
+        ? <img className="reference-preview" src={objectImage} alt="Reference object" />
+        : <div className="upload-idle"><h2>Upload object photo</h2><p>Drop a JPG, PNG or WEBP here, or choose a file.</p></div>}
+    </button>
+    <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden disabled={busy}
+      onChange={e => { choose(e.target.files[0]); e.target.value = ''; }} />
+    <label className="field-label">Where and how should it be placed? (optional)
+      <textarea value={prompt} disabled={busy} maxLength={600} onChange={e => setPrompt(e.target.value)} placeholder="Place it next to the window…" /></label>
+    <button className="primary-action" disabled={busy || !objectImage} onClick={() => onAdd(objectImage, prompt.trim())}>Add this object</button>
+  </section>;
+}
