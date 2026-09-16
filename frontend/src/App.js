@@ -66,6 +66,11 @@ function AppInner() {
     if(lock.current)return null;
     lock.current=true;setBusy(label);
     const controller=new AbortController();pending.current=controller;
+    // Browser fetch() has no built-in timeout — if Colab/ngrok hangs mid-request
+    // (a dropped tunnel that never closes the connection), this would otherwise
+    // leave busy stuck forever, disabling every button with no way to recover
+    // short of a page refresh. 3 minutes covers even slow Quality/SDXL generations.
+    const timeout=setTimeout(()=>controller.abort(),180000);
     const sourceRevision=revision.current, base=activeUrl.current;
     const request=(path,body)=>apiRequest(base,path,body,{signal:controller.signal});
     try {
@@ -74,9 +79,11 @@ function AppInner() {
       if(controller.signal.aborted || sourceRevision!==revision.current || base!==activeUrl.current)return null;
       return result;
     } catch(e) {
-      if(e.name!=='AbortError')toast(e.message || 'Operation failed.','error',6500);
+      if(e.name==='AbortError' && controller.signal.aborted && sourceRevision===revision.current)
+        toast('Request timed out after 3 minutes. Check the Colab notebook is still running.','error',7000);
+      else if(e.name!=='AbortError')toast(e.message || 'Operation failed.','error',6500);
       return null;
-    } finally {if(pending.current===controller)pending.current=null;lock.current=false;setBusy('');}
+    } finally {clearTimeout(timeout);if(pending.current===controller)pending.current=null;lock.current=false;setBusy('');}
   };
   const commit=(data,label)=>{
     const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label};
