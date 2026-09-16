@@ -13,6 +13,7 @@ import ResultView from './components/ResultView';
 import { ToastProvider, useToast } from './components/Toast';
 import { getApiUrl } from './config';
 import { apiRequest, imageSource } from './services/api';
+import { translateToEnglish } from './utils/translate';
 import './App.css';
 import './Workflow.css';
 
@@ -94,12 +95,17 @@ function AppInner() {
   };
   const apply=async(path,fields,label)=>{
     if(!current)return;
-    const data=await run('Applying your changes…',request=>request(path,{image:current.image,model:genModel,...fields}));
+    const translated={...fields};
+    if(translated.customPrompt)translated.customPrompt=await translateToEnglish(translated.customPrompt);
+    if(translated.prompt)translated.prompt=await translateToEnglish(translated.prompt);
+    if(translated.palette?.prompt)translated.palette={...translated.palette,prompt:await translateToEnglish(translated.palette.prompt)};
+    const data=await run('Applying your changes…',request=>request(path,{image:current.image,model:genModel,...translated}));
     if(data)commit(data,label);
   };
   const addObject=async(objectImage,prompt)=>{
     if(!current)return;
-    const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt,model:genModel}));
+    const translatedPrompt=await translateToEnglish(prompt);
+    const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt:translatedPrompt,model:genModel}));
     if(data)commit(data,'add_object');
   };
   const detect=async()=>{
@@ -153,7 +159,10 @@ function AppInner() {
         <div ref={toolPanel} key={`${version}-${tool}`}>
           {tool==='style' && <><img className="current-room" src={current.image} alt="Current room"/>
             <StyleSelector image={current.image} busy={!!busy} onGenerate={fields=>apply('/generate',fields,fields.style || 'custom_style')}
-              onPreview={(style,palette)=>run('Generating one style preview…',request=>request('/preview-styles',{image:current.image,styles:[style],palette,model:genModel}))}
+              onPreview={async(style,palette)=>{
+                const p=palette?.prompt?{...palette,prompt:await translateToEnglish(palette.prompt)}:palette;
+                return run('Generating one style preview…',request=>request('/preview-styles',{image:current.image,styles:[style],palette:p,model:genModel}));
+              }}
               onUsePreview={(image,style)=>{if(!lock.current)commit({image},style);}}/></>}
           {tool==='furnish' && <FurnishRoom image={current.image} busy={!!busy} selection={selection} onSelect={setSelection}
             onFurnish={prompt=>apply('/furnish-room',{prompt,selection},'furnish')}/>}
