@@ -203,7 +203,11 @@ function AppInner() {
                 const p=palette?.prompt?{...palette,prompt:await translateToEnglish(palette.prompt)}:palette;
                 return run('Generating one style preview…',request=>request('/preview-styles',{image:current.image,styles:[style],palette:p,model:genModel}));
               }}
-              onUsePreview={(image,style)=>{if(!lock.current)commit({image},style);}}/></>}
+              onUsePreview={(image,style)=>{if(!lock.current)commit({image},style);}}
+              onExploreAll={async(palette)=>{
+                const p=palette?.prompt?{...palette,prompt:await translateToEnglish(palette.prompt)}:palette;
+                return run('Sketching quick previews of every style…',request=>request('/preview-styles',{image:current.image,palette:p,model:genModel,draft:true}));
+              }}/></>}
           {tool==='furnish' && <FurnishRoom image={current.image} busy={!!busy} selection={selection} onSelect={setSelection}
             onFurnish={prompt=>apply('/furnish-room',{prompt,selection:requestSelection()},'furnish')}/>}
           {tool==='object' && <ObjectEditor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
