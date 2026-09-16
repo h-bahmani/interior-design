@@ -8,6 +8,7 @@ export default function RegionSelector({ image, regions = EMPTY_REGIONS, selecti
   const canvas = useRef(null);
   const masks = useRef([]);
   const baseImage = useRef(null);
+  const composed = useRef(null); // offscreen: base image + selected mask overlay, cached so dragging doesn't recompute it
   const start = useRef(null);
   const [mode, setMode] = useState(furnish ? 'box' : 'region');
   const [draft, setDraft] = useState(null);
@@ -44,26 +45,41 @@ export default function RegionSelector({ image, regions = EMPTY_REGIONS, selecti
     })().catch(e=>{if(!cancelled)setError(e.message);});
     return ()=>{cancelled=true;};
   }, [image, regions]);
+  const drawBox=(ctx,c,b)=>{
+    const [x1,y1,x2,y2]=b;ctx.fillStyle='rgba(230,184,70,.28)';ctx.strokeStyle='#e6b846';ctx.lineWidth=3;
+    ctx.fillRect(x1*c.width,y1*c.height,(x2-x1)*c.width,(y2-y1)*c.height);
+    ctx.strokeRect(x1*c.width,y1*c.height,(x2-x1)*c.width,(y2-y1)*c.height);
+  };
+  // Expensive: full-image redraw + a per-pixel mask overlay loop. Only reruns
+  // when the selected region changes, not on every pointer-move while dragging.
   useEffect(()=>{
     const c=canvas.current;
     if(!ready || !c || !baseImage.current)return;
-    const ctx=c.getContext('2d');ctx.drawImage(baseImage.current,0,0,c.width,c.height);
+    const off=document.createElement('canvas');off.width=c.width;off.height=c.height;
+    const octx=off.getContext('2d');octx.drawImage(baseImage.current,0,0,c.width,c.height);
     const picked=masks.current.find(m=>m.region.id===selection?.region_id);
     if(picked){
-      const overlay=ctx.createImageData(c.width,c.height);
+      const overlay=octx.createImageData(c.width,c.height);
       for(let i=0;i<picked.pixels.length;i++)if(picked.pixels[i]){
         overlay.data[i*4]=230;overlay.data[i*4+1]=184;overlay.data[i*4+2]=70;overlay.data[i*4+3]=115;
       }
       const layer=document.createElement('canvas');layer.width=c.width;layer.height=c.height;
-      layer.getContext('2d').putImageData(overlay,0,0);ctx.drawImage(layer,0,0);
+      layer.getContext('2d').putImageData(overlay,0,0);octx.drawImage(layer,0,0);
     }
+    composed.current=off;
+    const ctx=c.getContext('2d');ctx.drawImage(off,0,0);
     const selectedBox=draft || selection?.bbox;
-    if(selectedBox){
-      const [x1,y1,x2,y2]=selectedBox;ctx.fillStyle='rgba(230,184,70,.28)';ctx.strokeStyle='#e6b846';ctx.lineWidth=3;
-      ctx.fillRect(x1*c.width,y1*c.height,(x2-x1)*c.width,(y2-y1)*c.height);
-      ctx.strokeRect(x1*c.width,y1*c.height,(x2-x1)*c.width,(y2-y1)*c.height);
-    }
-  },[ready,selection,draft]);
+    if(selectedBox)drawBox(ctx,c,selectedBox);
+  },[ready,selection]);
+  // Cheap: reuses the cached composed layer, just redraws the draft rectangle
+  // on top — this is what runs on every pointer-move while dragging a box.
+  useEffect(()=>{
+    const c=canvas.current;
+    if(!ready || !c || !composed.current)return;
+    const ctx=c.getContext('2d');ctx.drawImage(composed.current,0,0);
+    const selectedBox=draft || selection?.bbox;
+    if(selectedBox)drawBox(ctx,c,selectedBox);
+  },[draft]);
   const point=e=>{
     const r=canvas.current.getBoundingClientRect();
     return [Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))];
