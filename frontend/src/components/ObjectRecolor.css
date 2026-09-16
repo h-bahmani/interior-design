@@ -1,0 +1,9 @@
+.object-recolor .recolor-presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:10px;margin:20px 0}
+.object-recolor .recolor-presets button{display:flex;align-items:center;gap:9px;padding:8px;text-align:left}
+.object-recolor .recolor-presets span{width:30px;height:30px;border:1px solid rgba(255,255,255,.28);border-radius:50%;flex:0 0 auto}
+.object-recolor .recolor-presets small{font-size:.78rem;line-height:1.2}
+.object-recolor .recolor-controls{display:grid;grid-template-columns:minmax(150px,220px) minmax(220px,1fr);gap:20px;align-items:end;margin:20px 0}
+.object-recolor .recolor-controls label{display:flex;flex-direction:column;gap:9px;color:#ddd}
+.object-recolor input[type=color]{width:100%;height:46px;padding:3px;background:#222;border:1px solid #655833;border-radius:8px;cursor:pointer}
+.object-recolor input[type=range]{width:100%;accent-color:#e6b846}
+@media(max-width:650px){.object-recolor .recolor-controls{grid-template-columns:1fr}}
