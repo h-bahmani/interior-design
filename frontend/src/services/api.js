@@ -19,6 +19,6 @@ export async function apiRequest(base, path, body, { signal } = {}) {
   if (!response.ok || !data || data.error) {
     throw new Error(data?.error || `Request failed (${response.status}). Check the notebook connection.`);
   }
-  if (['/upload','/generate','/furnish-room','/edit-object','/delete-object','/add-object'].includes(path)) imageSource(data.image, data.mime_type);
+  if (['/upload','/generate','/furnish-room','/edit-object','/delete-object','/add-object','/recolor-object'].includes(path)) imageSource(data.image, data.mime_type);
   return data;
 }

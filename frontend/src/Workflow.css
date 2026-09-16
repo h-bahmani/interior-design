@@ -15,7 +15,18 @@
 .preview-panel img{display:block;max-width:100%;max-height:400px;margin:16px 0}.preview-panel{margin-top:20px}
 .color-swatches{display:flex;margin:12px 0}.color-swatches span{width:28px;height:28px;display:inline-block}
 .custom-colors label{display:flex;flex-direction:column;gap:8px}.custom-colors input{width:75px;height:45px}
-.operation-status{position:sticky;top:10px;z-index:20;background:#463b20;color:#fff;padding:16px;border:1px solid #c9a84c;border-radius:8px}
+.operation-status-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(3px);z-index:9999}
+.operation-status{width:min(420px,90vw);border-radius:24px;padding:32px 24px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,15,30,.9);border:1px solid rgba(230,184,70,.25);box-shadow:0 0 60px rgba(230,184,70,.1)}
+.ai-circle-wrapper{width:220px;height:220px;position:relative;display:flex;align-items:center;justify-content:center}
+.ai-circle{width:170px;height:170px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;position:relative;z-index:2;background:radial-gradient(circle,rgba(230,184,70,.12),rgba(20,18,10,.8));box-shadow:0 0 40px rgba(230,184,70,.2),inset 0 0 30px rgba(255,255,255,.06)}
+.ai-circle video{width:100%;height:100%;object-fit:cover}
+.orbit{position:absolute;border-radius:50%;border:2px solid transparent}
+.orbit-one{width:210px;height:210px;border-top-color:#e6b846;border-right-color:rgba(230,184,70,.35);animation:spin 7s linear infinite}
+.orbit-two{width:190px;height:190px;border-bottom-color:#8b5cf6;border-left-color:rgba(139,92,246,.45);animation:spinReverse 5s linear infinite}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes spinReverse{from{transform:rotate(360deg)}to{transform:rotate(0deg)}}
+.status-text{margin-top:22px;text-align:center;color:#fff;font-size:18px}
+.status-text span{display:block;margin-top:8px;opacity:.65;font-size:13px}
 .result-fieldset{border:0;padding:0;margin-top:35px;min-width:0}.history-image{width:100%;height:140px;object-fit:contain}
 .app button:focus-visible,.app textarea:focus-visible{outline:3px solid #e6b846;outline-offset:3px}
 .header .logo{background:none;border:0;color:inherit}.user-info{flex-wrap:wrap}

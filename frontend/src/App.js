@@ -9,6 +9,7 @@ import StyleSelector from './components/StyleSelector';
 import FurnishRoom from './components/FurnishRoom';
 import ObjectEditor from './components/ObjectEditor';
 import AddObjectFromPhoto from './components/AddObjectFromPhoto';
+import ObjectRecolor from './components/ObjectRecolor';
 import ResultView from './components/ResultView';
 import { ToastProvider, useToast } from './components/Toast';
 import { getApiUrl } from './config';
@@ -17,7 +18,7 @@ import { translateToEnglish } from './utils/translate';
 import './App.css';
 import './Workflow.css';
 
-const TOOLS = [['style','8 Design Styles'],['furnish','Furnish Rooms'],['object','Object Editing / Deleting'],['addobject','Add Object From Photo']];
+const TOOLS = [['style','8 Design Styles'],['furnish','Furnish Rooms'],['object','Object Editing / Deleting'],['addobject','Add Object From Photo'],['recolor','Object Recolor']];
 function AppInner() {
   const toast=useToast();
   const [user,setUser]=useState(null), [authChecked,setAuthChecked]=useState(false);
@@ -29,8 +30,13 @@ function AppInner() {
   const [genModel,setGenModel]=useState(()=>localStorage.getItem('interiorai_gen_model')||'fast');
   const changeModel=m=>{setGenModel(m);localStorage.setItem('interiorai_gen_model',m);};
   const lock=useRef(false), revision=useRef(0), pending=useRef(null), activeUrl=useRef(apiUrl), download=useRef(null), toolPanel=useRef(null);
-  const invalidate=useCallback(()=>{
-    revision.current+=1; setVersion(revision.current);setRegions([]);setSelection(null);
+  // clearRegions=false for in-place edits (commit/undo/restore/history) — keeps
+  // the detected region list valid across a chain of edits so you don't have to
+  // re-run detection after every single change.
+  const invalidate=useCallback((clearRegions=true)=>{
+    revision.current+=1; setVersion(revision.current);
+    if(clearRegions)setRegions([]);
+    setSelection(null);
   },[]);
   const changeUrl=useCallback((url)=>{
     const clean=url.trim().replace(/\/+$/,'');
@@ -89,7 +95,7 @@ function AppInner() {
     const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label};
     setBefore(current);setCurrent(next);
     setHistory(h=>[{...next,id:Date.now()+Math.random()},...h].slice(0,8));
-    invalidate();
+    invalidate(false);
     if(data.warning)toast(data.warning,'info',7000);
     else toast('Changes applied.','success');
   };
@@ -115,6 +121,17 @@ function AppInner() {
     const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt:translatedPrompt,model:genModel}));
     if(data)commit(data,'add_object');
   };
+  // A region_id is only valid against the image it was detected on (the
+  // backend indexes regions by a hash of that image's bytes). Since regions
+  // now survive across edits (see invalidate above), a region picked before
+  // an earlier edit would otherwise be rejected as "expired" on the next one —
+  // sending its actual mask instead sidesteps that lookup entirely.
+  const requestSelection=()=>{
+    if(!selection?.region_id)return selection;
+    const region=regions.find(item=>item.id===selection.region_id);
+    return region?.mask ? {mask:region.mask} : selection;
+  };
+  const recolorObject=(color,strength)=>apply('/recolor-object',{selection:requestSelection(),color,strength},'recolor');
   const detect=async()=>{
     const data=await run('Finding objects and surfaces…',request=>request('/detect-objects',{image:current.image}));
     if(data){setRegions(data.regions || []);setSelection(null);if(!data.regions?.length)toast('No areas found. Try clicking an area or drawing a rectangle.','info');}
@@ -123,7 +140,7 @@ function AppInner() {
     const data=await run('Finding the selected area…',request=>request('/segment-point',{image:current.image,point:coordinates}));
     if(data){setRegions(r=>[...r,{id:data.region_id,label:'Selected area',mask:data.mask,bbox:[0,0,1,1]}]);setSelection({region_id:data.region_id});}
   };
-  const undo=()=>{if(!before || lock.current)return;setCurrent(before);setBefore(null);invalidate();};
+  const undo=()=>{if(!before || lock.current)return;setCurrent(before);setBefore(null);invalidate(false);};
   const reset=()=>{if(lock.current)return;download.current=null;setCurrent(null);setOriginal(null);setBefore(null);setHistory([]);invalidate();};
   useEffect(()=>{
     const handler=e=>{
@@ -155,12 +172,27 @@ function AppInner() {
     </div></header>
     <main className="main">
       {connection==='incompatible' && <p role="alert">Connect the API v2 notebook before editing.</p>}
-      {busy && <div className="operation-status" role="status" aria-live="polite">{busy} Please keep this page open.</div>}
+      {busy && (
+        <div className="operation-status-overlay" role="status" aria-live="polite">
+          <div className="operation-status">
+            <div className="ai-circle-wrapper">
+              <div className="orbit orbit-one"></div>
+              <div className="orbit orbit-two"></div>
+              <div className="ai-circle">
+                <video autoPlay loop muted playsInline>
+                  <source src="/ai-loader.mp4" type="video/mp4" />
+                </video>
+              </div>
+            </div>
+            <div className="status-text">{busy}<span>Please keep this page open</span></div>
+          </div>
+        </div>
+      )}
       {!current?<><div className="page-header"><h1>Transform Your Space</h1><p>Start with your room photo.</p></div><Upload onUpload={upload} busy={!!busy}/></>:<>
         <div className="page-header"><h1>Your Room Workspace</h1><p>Every tool uses the current image. Undo restores the previous result.</p></div>
         <div className="tool-actions"><button disabled={!!busy} onClick={reset}>Upload another photo</button>
           <button disabled={!!busy || !before} onClick={undo}>Undo last change</button>
-          <button disabled={!!busy || current===original} onClick={()=>{setBefore(current);setCurrent(original);invalidate();}}>Restore original</button></div>
+          <button disabled={!!busy || current===original} onClick={()=>{setBefore(current);setCurrent(original);invalidate(false);}}>Restore original</button></div>
         <nav className="operation-tabs" aria-label="Room tools">{TOOLS.map(([id,label])=><button key={id} disabled={!!busy} aria-pressed={tool===id}
           onClick={()=>{setTool(id);setSelection(null);}}>{label}</button>)}</nav>
         <div ref={toolPanel} key={`${version}-${tool}`}>
@@ -172,17 +204,19 @@ function AppInner() {
               }}
               onUsePreview={(image,style)=>{if(!lock.current)commit({image},style);}}/></>}
           {tool==='furnish' && <FurnishRoom image={current.image} busy={!!busy} selection={selection} onSelect={setSelection}
-            onFurnish={prompt=>apply('/furnish-room',{prompt,selection},'furnish')}/>}
+            onFurnish={prompt=>apply('/furnish-room',{prompt,selection:requestSelection()},'furnish')}/>}
           {tool==='object' && <ObjectEditor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
-            onDetect={detect} onPoint={point} onEdit={(action,prompt)=>apply(action==='delete'?'/delete-object':'/edit-object',{selection,prompt},action)}/>}
+            onDetect={detect} onPoint={point} onEdit={(action,prompt)=>apply(action==='delete'?'/delete-object':'/edit-object',{selection:requestSelection(),prompt},action)}/>}
           {tool==='addobject' && <AddObjectFromPhoto busy={!!busy} onAdd={addObject}/>}
+          {tool==='recolor' && <ObjectRecolor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
+            onDetect={detect} onPoint={point} onRecolor={recolorObject}/>}
         </div>
         {current!==original && <fieldset className="result-fieldset" disabled={!!busy}>
           <ResultView original={original.image} key={version} generated={current.image} style={current.label} onReset={reset}
             onNewStyle={()=>toolPanel.current?.scrollIntoView({behavior:'smooth'})} onUndo={undo} canUndo={!!before} onRegisterDownload={registerDownload}/>
         </fieldset>}
         {showHistory && <section className="tool-panel"><h2>Session history</h2><p>Up to eight results are kept in this session.</p><div className="tool-grid">
-          {history.map(item=><button disabled={!!busy} key={item.id} onClick={()=>{setBefore(current);setCurrent(item);invalidate();setShowHistory(false);}}>
+          {history.map(item=><button disabled={!!busy} key={item.id} onClick={()=>{setBefore(current);setCurrent(item);invalidate(false);setShowHistory(false);}}>
             <img className="history-image" src={item.image} alt={item.label}/><span>{item.label.replace(/_/g,' ')}</span></button>)}
         </div><button disabled={!!busy} onClick={()=>{setHistory([]);setShowHistory(false);}}>Clear history</button></section>}
       </>}
