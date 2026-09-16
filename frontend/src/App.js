@@ -68,15 +68,16 @@ function AppInner() {
   },[apiUrl,busy]);
   // Local state owns the displayed image. Send its bytes, never a global "last upload".
   // PNG returned by /upload is canonical, so region hashes match later requests.
-  const run=async(label,work)=>{
+  const run=async(label,work,timeoutMs=180000)=>{
     if(lock.current)return null;
     lock.current=true;setBusy(label);
     const controller=new AbortController();pending.current=controller;
     // Browser fetch() has no built-in timeout — if Colab/ngrok hangs mid-request
     // (a dropped tunnel that never closes the connection), this would otherwise
     // leave busy stuck forever, disabling every button with no way to recover
-    // short of a page refresh. 3 minutes covers even slow Quality/SDXL generations.
-    const timeout=setTimeout(()=>controller.abort(),180000);
+    // short of a page refresh. Default covers even slow Quality/SDXL generations;
+    // batch calls (e.g. previewing many styles at once) pass a longer one.
+    const timeout=setTimeout(()=>controller.abort(),timeoutMs);
     const sourceRevision=revision.current, base=activeUrl.current;
     const request=(path,body)=>apiRequest(base,path,body,{signal:controller.signal});
     try {
@@ -86,7 +87,7 @@ function AppInner() {
       return result;
     } catch(e) {
       if(e.name==='AbortError' && controller.signal.aborted && sourceRevision===revision.current)
-        toast('Request timed out after 3 minutes. Check the Colab notebook is still running.','error',7000);
+        toast(`Request timed out after ${Math.round(timeoutMs/60000)} minute(s). Check the Colab notebook is still running.`,'error',7000);
       else if(e.name!=='AbortError')toast(e.message || 'Operation failed.','error',6500);
       return null;
     } finally {clearTimeout(timeout);if(pending.current===controller)pending.current=null;lock.current=false;setBusy('');}
@@ -204,9 +205,12 @@ function AppInner() {
                 return run('Generating one style preview…',request=>request('/preview-styles',{image:current.image,styles:[style],palette:p,model:genModel}));
               }}
               onUsePreview={(image,style)=>{if(!lock.current)commit({image},style);}}
-              onExploreAll={async(palette)=>{
+              onExploreAll={async(palette,styleIds)=>{
                 const p=palette?.prompt?{...palette,prompt:await translateToEnglish(palette.prompt)}:palette;
-                return run('Sketching quick previews of every style…',request=>request('/preview-styles',{image:current.image,palette:p,model:genModel,draft:true}));
+                // Scales with how many styles were picked — batching drafts still
+                // takes real GPU time per style, just less than a full generation.
+                const timeoutMs=60000+styleIds.length*25000;
+                return run('Sketching quick previews…',request=>request('/preview-styles',{image:current.image,styles:styleIds,palette:p,model:genModel,draft:true}),timeoutMs);
               }}/></>}
           {tool==='furnish' && <FurnishRoom image={current.image} busy={!!busy} selection={selection} onSelect={setSelection}
             onFurnish={prompt=>apply('/furnish-room',{prompt,selection:requestSelection()},'furnish')}/>}
