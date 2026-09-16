@@ -111,6 +111,7 @@ function AppInner() {
     const translated={...fields};
     if(translated.customPrompt)translated.customPrompt=await translateToEnglish(translated.customPrompt);
     if(translated.prompt)translated.prompt=await translateToEnglish(translated.prompt);
+    if(translated.extraDetails)translated.extraDetails=await translateToEnglish(translated.extraDetails);
     if(translated.palette?.prompt)translated.palette={...translated.palette,prompt:await translateToEnglish(translated.palette.prompt)};
     const data=await run('Applying your changes…',request=>request(path,{image:current.image,model:genModel,...translated}));
     if(data)commit(data,label);
@@ -197,7 +198,7 @@ function AppInner() {
           onClick={()=>{setTool(id);setSelection(null);}}>{label}</button>)}</nav>
         <div ref={toolPanel} key={`${version}-${tool}`}>
           {tool==='style' && <><img className="current-room" src={current.image} alt="Current room"/>
-            <StyleSelector image={current.image} busy={!!busy} onGenerate={fields=>apply('/generate',fields,fields.style || 'custom_style')}
+            <StyleSelector image={current.image} busy={!!busy} onGenerate={fields=>apply('/generate',fields,fields.style || (fields.colorsOnly ? 'colors_only' : 'custom_style'))}
               onPreview={async(style,palette)=>{
                 const p=palette?.prompt?{...palette,prompt:await translateToEnglish(palette.prompt)}:palette;
                 return run('Generating one style preview…',request=>request('/preview-styles',{image:current.image,styles:[style],palette:p,model:genModel}));
