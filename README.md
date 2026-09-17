@@ -1,34 +1,54 @@
-# AI Interior Designer v2
+# InteriorAI
 
-> Transform any room photo into a professionally designed space using AI — in under 2 minutes.
+> Transform any room photo into a professionally redesigned space using AI.
 
-**Live App:** [ai-interior-designer-v2-m4z5.vercel.app](https://ai-interior-designer-v2-m4z5.vercel.app)
+Started from a teammate's project ([AlirezaGfr98/Ai_interior_Designer](https://github.com/AlirezaGfr98/Ai_interior_Designer), kept here as the `upstream` remote). This repo tracks my own work on top of it — see **[My Contribution](#my-contribution)** below for exactly what's mine versus the shared baseline.
 
 ---
 
 ## What It Does
 
-Upload a room photo. Pick a design style. The AI redesigns it while keeping your walls, windows, doors, and layout exactly intact — only the aesthetic changes.
+Upload a room photo, then:
+- Apply one of 16 design styles, or describe your own, or just change the color palette without touching the style
+- Add a specific object from a reference photo (not a text description — the actual item)
+- Edit, delete, or recolor individual detected objects
+- Furnish an empty area with new items
 
-Built using **ControlNet (Canny edge detection)** + **Stable Diffusion 1.5**, so the room structure is always preserved. Unlike simple style transfer, this approach traces your room's actual geometry before generating.
+The room's structure (walls, windows, doors, layout) stays intact throughout — every generation is grounded in the real photo via ControlNet + Img2Img, not built from scratch.
 
 ---
 
 ## Features
 
 | Feature | Description |
-|---------|-------------|
-| **8 Design Styles** | Minimalist, Industrial, Cyberpunk, Modern Luxury, Scandinavian, Mid-Century, Japanese Zen, Bohemian |
-| **Color Palette Guidance** | 8 presets + custom color picker to influence the mood |
-| **Custom Prompt** | Describe your own style in plain English |
-| **Preview All 8 Styles** | Generate all styles simultaneously for comparison (~8 min) |
-| **Style Comparison** | 3-panel side-by-side viewer |
-| **Object Editing** | Select a detected object (sofa, table, etc.) and replace it with a text prompt |
-| **Furnish Room** | Generate furniture into an empty room by category (living room, bedroom, etc.) |
-| **Before/After Slider** | Drag to compare original vs. generated |
-| **Download** | Save result with watermark |
-| **History** | Last 8 generations saved locally |
-| **Authentication** | Email/password + Google OAuth via Firebase |
+|---|---|
+| **16 Design Styles** | Minimalist, Industrial, Cyberpunk, Modern Luxury, Scandinavian, Mid-Century, Japanese Zen, Bohemian, Art Deco, Coastal, French Country, Rustic Farmhouse, Contemporary Glam, Dark Academia, Tropical Modern, Brutalist |
+| **Fast Preview Gallery** | Low-res, ~10x faster drafts of chosen styles side by side, to pick a direction before spending full generation time |
+| **Colors Only mode** | Change just the wall/decor colors — layout and furniture untouched, no style bias applied |
+| **Color Palettes** | 8 presets + custom color picker, usable with a style or standalone |
+| **Add Object From Photo** | Insert a specific item from a reference image (IP-Adapter), not a text guess |
+| **Object Edit / Delete / Recolor** | Click-to-select or draw a region; edit with a text prompt, remove cleanly (LaMa), or recolor exactly (pixel-level, no model) |
+| **Fast / Quality toggle** | SD1.5 (quick) or SDXL (slower, more photorealistic) per generation |
+| **Furnish Room** | Add furniture into a selected area or the room's lower half by default |
+| **History, Undo, Restore Original** | Session-local, up to 8 results |
+
+---
+
+## My Contribution
+
+The teammate's baseline (and a later rewrite they pushed) provided a genuinely good architecture: region/mask-based selection (`region_id`/`mask`/`bbox`/`point`), image storage by ID, and combined YOLO+SAM+SegFormer detection. I kept that and built the following on top of it:
+
+- **Dual-model system** — SD1.5 (fast) and SDXL (quality), lazily loaded so only one is ever resident in GPU memory at a time, with a Fast/Quality toggle in the UI
+- **Photorealism checkpoints** — swapped the vanilla base models for community fine-tunes (Realistic Vision for SD1.5, Juggernaut XL for SDXL)
+- **Fixed the core generation bug** — the pipeline was generating from the Canny edge map alone, never the real photo; switched to Img2Img so the model actually starts from real pixels
+- **Add Object From Photo** — new end-to-end feature (frontend tool + backend IP-Adapter pipeline) that didn't exist before
+- **Object Recolor** — deterministic OpenCV/LAB color remapping, no generative model, so results are pixel-accurate instead of approximate
+- **LaMa-based object deletion** — replaced repurposed inpainting ("generate nothing here") with a model built specifically for background reconstruction
+- **8 additional design styles** (16 total) with hand-written positive/negative prompts, plus a **fast draft-preview gallery** so browsing many styles doesn't cost a full generation each
+- **Colors Only mode** — decoupled palette application from style selection, with its own tuned generation parameters
+- **Connection security** — bearer-token auth (`CONNECTION_KEY`) on the Colab/Kaggle Flask server; the shared baseline had none
+- **Reliability fixes** — request timeouts (a hung tunnel no longer freezes the whole UI), automatic Persian→English prompt translation (the models barely understand non-English text), region-selection performance fix, and several environment/install fixes for the Colab notebook itself
+- Systematic debugging of ~9 earlier issues (wrong room type, VRAM crashes, IP-Adapter device placement, rate limiting, etc.) documented in commit history
 
 ---
 
@@ -38,96 +58,67 @@ Built using **ControlNet (Canny edge detection)** + **Stable Diffusion 1.5**, so
 Your Photo
     │
     ▼
-Edge Detection (Canny)        ← preserves walls, doors, windows
+Canny Edge Detection          ← preserves walls, doors, windows
     │
     ▼
-Stable Diffusion 1.5          ← generates styled room within edges
-+ ControlNet Canny
+Img2Img + ControlNet           ← starts from the real photo, not just its edges
+(SD1.5 Realistic Vision, or SDXL Juggernaut XL)
     │
     ▼
 Styled Room Image
     │
-    ├─► Object Editing:
-    │       YOLOv8 detects furniture
-    │       SAM creates precise mask
-    │       SD Inpainting replaces object
-    │
-    └─► Result View (compare slider, download, share)
+    ├─► Object Editing: YOLOv8 + SAM + SegFormer detect → localized inpaint
+    ├─► Object Deletion: LaMa background reconstruction
+    ├─► Object Recolor: OpenCV LAB channel remap (no model)
+    └─► Add Object: IP-Adapter blends a reference photo's item into the room
 ```
 
-The AI pipeline runs on a **Google Colab T4 GPU** (free). The Colab notebook connects automatically to the frontend via Firebase Firestore — no manual URL entry needed.
+The AI pipeline runs on a free **Google Colab / Kaggle T4 GPU**. The frontend connects directly to the notebook's Flask server via an authenticated ngrok tunnel — paste the URL and connection key printed by the notebook's last cell into the app's "Connect AI Backend" dialog.
 
 ---
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, Framer Motion, CSS Variables |
-| Auth & DB | Firebase Authentication, Firebase Firestore |
-| Storage | Firebase Storage |
-| AI Models | Stable Diffusion 1.5, ControlNet Canny, SD Inpainting |
-| Object Detection | YOLOv8x |
-| Segmentation | SAM ViT-H (Segment Anything Model) |
-| GPU Runtime | Google Colab (T4 GPU, free tier) |
-| Tunnel | ngrok (Colab → internet) |
-| Backend | Flask (Python), Pillow |
-| Hosting | Vercel (frontend), local Flask |
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      User's Browser                      │
-│              React 19  ·  Vercel  ·  Firebase            │
-└───────────────────────────┬─────────────────────────────┘
-                            │ REST API (via ngrok URL)
-                            │ URL auto-registered in Firestore
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Google Colab (GPU)                    │
-│   Flask server  ·  ngrok tunnel  ·  Python AI pipeline   │
-│                                                          │
-│  ┌──────────────┐  ┌────────────┐  ┌─────────────────┐  │
-│  │  ControlNet  │  │  SD 1.5 /  │  │  YOLOv8x + SAM  │  │
-│  │  Canny Edge  │  │ Inpainting │  │  Object Editor  │  │
-│  └──────────────┘  └────────────┘  └─────────────────┘  │
-│              Models cached on Google Drive               │
-└─────────────────────────────────────────────────────────┘
-```
+|---|---|
+| Frontend | React 19, Firebase Auth |
+| AI Models | Stable Diffusion 1.5 (Realistic Vision) + SDXL (Juggernaut XL), ControlNet Canny, IP-Adapter |
+| Object Detection | YOLOv8x + SAM ViT-H + SegFormer (semantic segmentation) |
+| Object Removal | LaMa (simple-lama-inpainting) |
+| Object Recolor | OpenCV (LAB color space, no generative model) |
+| GPU Runtime | Google Colab / Kaggle (T4 GPU, free tier) |
+| Tunnel | ngrok, bearer-token authenticated |
+| Local backend (optional) | Flask (Python) — multi-engine fallback (Gemini/OpenAI/Replicate), not in the default request path |
 
 ---
 
 ## Project Structure
 
 ```
-ai-interior-designer-v2/
+Ai_interior_Designer_original/
 ├── frontend/
-│   ├── public/
 │   └── src/
-│       ├── App.js                    # State hub, routing, Firebase auto-connect
-│       ├── config.js                 # API URL resolution
-│       ├── firebase.js               # Firebase project config
+│       ├── App.js                        # State hub, request handling, translation
+│       ├── config.js                     # API URL + connection key resolution
+│       ├── utils/translate.js            # Persian → English prompt translation
 │       └── components/
-│           ├── Auth.js               # Email + Google OAuth login
-│           ├── Upload.js             # Drag-and-drop room upload
-│           ├── StyleSelector.js      # Style cards, palette, custom prompt
-│           ├── ResultView.js         # Compare slider, download, undo
-│           ├── ObjectEditor.js       # YOLO detect + SAM inpaint
-│           ├── StyleComparison.js    # 3-panel style comparison
-│           ├── FurnishRoom.js        # Room type + furniture generation
-│           ├── ColorPaletteSelector.js # Palette presets + color picker
-│           ├── BackendSetup.js       # Manual backend URL popup
-│           └── Toast.js              # Notification system
+│           ├── StyleSelector.js          # 16 styles, custom prompt, Colors Only mode
+│           ├── StyleGallery.js           # Fast draft-preview gallery
+│           ├── ColorPaletteSelector.js   # Presets + custom palette
+│           ├── RegionSelector.js         # Click / draw / point-based selection
+│           ├── ObjectEditor.js           # Edit / delete selected object
+│           ├── ObjectRecolor.js          # Exact recolor of a selected object
+│           ├── AddObjectFromPhoto.js     # IP-Adapter reference-photo insertion
+│           ├── FurnishRoom.js
+│           ├── BackendSetup.js           # Connect AI Backend (URL + connection key)
+│           └── ...
 │
 ├── backend/
-│   ├── AI_Interior_Designer_v2.ipynb # Colab notebook — run this for AI
-│   ├── app.py                        # Local Flask API (for development)
+│   ├── Original_Interior_Colab_Launch.ipynb   # Run this for AI generation
+│   ├── Experimental_Depth_ControlNet_Kaggle.ipynb  # Separate depth-based experiment
+│   ├── app.py                            # Optional local multi-engine proxy (Gemini/OpenAI/Replicate)
 │   └── requirements.txt
 │
-├── SETUP_GUIDE.md                    # Full deployment + usage guide
 └── README.md
 ```
 
@@ -135,21 +126,7 @@ ai-interior-designer-v2/
 
 ## Quick Start
 
-### Prerequisites
-
-- Node.js 18+ and npm
-- Python 3.9+
-- A Google account (for Colab)
-- A Firebase project (for auth + auto-connect)
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/bordanirav02/ai-interior-designer-v2.git
-cd ai-interior-designer-v2
-```
-
-### 2. Start the frontend
+### 1. Frontend
 
 ```bash
 cd frontend
@@ -157,107 +134,25 @@ npm install
 npm start
 ```
 
-App opens at `http://localhost:3000`.
+Opens at `http://localhost:3000`.
 
-### 3. Start the local Flask backend (optional)
+### 2. AI backend (required for generation)
+
+1. Open `backend/Original_Interior_Colab_Launch.ipynb` in Google Colab
+2. Runtime → Change runtime type → **T4 GPU**
+3. Runtime → Run all (a fresh **Disconnect and delete runtime** first if you've run it before and hit an install error)
+4. Copy the `BACKEND_URL` and `CONNECTION_KEY` printed by the last cell
+5. In the app, click **Connection** → paste both values
+
+### 3. Local Flask proxy (optional)
+
+Only needed if you want the Gemini/OpenAI/Replicate fallback engines — the frontend talks directly to the Colab notebook by default.
 
 ```bash
 cd backend
 pip install -r requirements.txt
 python app.py
 ```
-
-Backend runs at `http://localhost:5000`.
-
-### 4. Start the AI pipeline (required for generation)
-
-1. Open the Colab notebook: [AI\_Interior\_Designer\_v2.ipynb](backend/AI_Interior_Designer_v2.ipynb)
-2. Set runtime to **T4 GPU** (Runtime → Change runtime type)
-3. Click **Run all** (`Ctrl+F9`)
-4. Wait ~7 minutes for models to load
-
-The notebook automatically registers its ngrok URL with Firebase — the frontend connects without any manual configuration.
-
-For the full deployment guide including Firebase setup, Vercel env vars, and troubleshooting, see [SETUP_GUIDE.md](SETUP_GUIDE.md).
-
----
-
-## API Endpoints (Colab Flask)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Check model load status |
-| `POST` | `/upload` | Upload room image (saves as 512×512) |
-| `POST` | `/generate` | Style transfer via ControlNet + SD |
-| `POST` | `/detect-objects` | YOLOv8 object detection on styled image |
-| `POST` | `/edit-object` | SAM mask + inpainting for object replacement |
-| `POST` | `/preview-styles` | Generate all 8 styles simultaneously |
-| `POST` | `/furnish-room` | Add furniture to an empty room |
-
----
-
-## Deployment
-
-### Frontend (Vercel)
-
-```bash
-cd frontend
-CI=false npm run build
-# Deploy via Vercel dashboard or CLI
-```
-
-Set the environment variable in Vercel:
-- `REACT_APP_API_URL` = `http://localhost:5000` (fallback; Colab URL is set dynamically via Firebase)
-
-### AI Backend (Google Colab)
-
-No server to deploy — the Colab notebook IS the backend. Start it when you need AI generation; keep the tab open while users are active.
-
-- Free tier: T4 GPU, 12 hrs/session, ~90 min idle timeout
-- For production: Colab Pro ($10/month) for longer sessions and A100 GPU
-
----
-
-## Performance
-
-| Operation | Time |
-|-----------|------|
-| Single style generation | ~1–2 min |
-| Preview all 8 styles | ~8 min |
-| Object detection | ~5 sec |
-| Object replacement (inpainting) | ~30 sec |
-| Model cold start (first session) | ~7–10 min |
-| Model warm start (Drive cache) | ~3–4 min |
-
----
-
-## Cost
-
-Everything used is free for personal / demo use:
-
-| Service | Plan | Limit |
-|---------|------|-------|
-| Vercel | Free | Unlimited personal projects |
-| Firebase | Spark (free) | 50K reads/day, 20K writes/day |
-| Google Colab | Free | T4 GPU, 12 hrs/session |
-| ngrok | Free | 1 tunnel (URL changes each session) |
-
----
-
-## Design System
-
-- **Theme:** Dark — `#0a0a0f` background, `#c9a84c` gold accent
-- **Headings:** Cormorant Garamond (serif, editorial)
-- **Body:** DM Sans (clean, readable)
-- **Animations:** Framer Motion (page transitions, hover states)
-
----
-
-## About
-
-Northeastern University Master's capstone project — demonstrating end-to-end AI integration in a full-stack web application.
-
-**Stack rationale:** React 19 for reactive UI, Firebase for zero-infrastructure auth and real-time config sync, Google Colab to avoid GPU hosting costs while keeping the AI pipeline state-of-the-art.
 
 ---
 
