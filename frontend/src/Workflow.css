@@ -29,8 +29,9 @@
 .status-text span{display:block;margin-top:8px;opacity:.65;font-size:13px}
 .result-fieldset{border:0;padding:0;margin-top:35px;min-width:0}.history-image{width:100%;height:140px;object-fit:contain}
 .app button:focus-visible,.app textarea:focus-visible{outline:3px solid #e6b846;outline-offset:3px}
-.header .logo{background:none;border:0;color:inherit}.user-info{flex-wrap:wrap}
-.model-toggle{display:flex;gap:4px}.model-toggle button{padding:6px 12px;font-size:12px}
+.header .logo{background:none;border:0;color:inherit}.user-info{flex-wrap:wrap;gap:10px}
+.model-toggle{display:flex;gap:2px;background:#1a1710;border:1px solid #655833;border-radius:8px;padding:3px}
+.model-toggle button{padding:7px 14px;font-size:12px;border:0;border-radius:6px;background:transparent}
 .reference-preview{max-width:220px;max-height:220px;border-radius:10px;display:block;margin:0 auto}
 .style-gallery{margin:18px 0}
 .style-gallery-picks{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
