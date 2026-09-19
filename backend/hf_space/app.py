@@ -181,7 +181,12 @@ def sam_points_mask(im, positive, negative=None, bbox=None):
         box=np.array(box_pixels(bbox, im), np.float32) if bbox else None,
         multimask_output=True,
     )
-    return m[int(np.argmax(s))]
+    mask = m[int(np.argmax(s))]
+    # Same small dilation detect_objects applies to its own masks — otherwise
+    # clicking an object could leave a thin sliver of it outside the selection.
+    dilate_px = max(2, round(min(im.size) * 0.004))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * dilate_px + 1, 2 * dilate_px + 1))
+    return cv2.dilate(mask.astype("uint8"), kernel, iterations=1).astype(bool)
 
 
 def selection_mask(im, selection):
@@ -415,7 +420,12 @@ def semantic_regions(im):
     global _semantic_processor, _semantic_model
     if _semantic_model is None:
         from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
-        model_id = "nvidia/segformer-b0-finetuned-ade-512-512"
+        # b0 (the smallest SegFormer variant) frequently missed common interior
+        # surfaces — curtains, cushions, cabinets, picture frames — that simply
+        # have no class in COCO/YOLO's 80 labels at all. b2 is meaningfully more
+        # accurate and still cheap enough to run on CPU (no VRAM competition
+        # with the generation pipelines).
+        model_id = "nvidia/segformer-b2-finetuned-ade-512-512"
         _semantic_processor = AutoImageProcessor.from_pretrained(model_id, cache_dir=CACHE_DIR)
         _semantic_model = SegformerForSemanticSegmentation.from_pretrained(model_id, cache_dir=CACHE_DIR).eval()
     inputs = _semantic_processor(images=im, return_tensors="pt")
@@ -427,7 +437,10 @@ def semantic_regions(im):
         label = _semantic_model.config.id2label[int(cls)].split(";")[0]
         n, parts, stats, _ = cv2.connectedComponentsWithStats((labels == cls).astype("uint8"), 8)
         for i in range(1, n):
-            if stats[i, cv2.CC_STAT_AREA] >= max(64, im.width * im.height * 0.003):
+            # Old threshold (0.3% of image area) silently dropped small real
+            # objects (a picture frame, a table lamp). Lowered to 0.12%; the
+            # absolute 64px floor still filters out pure noise specks.
+            if stats[i, cv2.CC_STAT_AREA] >= max(64, im.width * im.height * 0.0012):
                 yield label, parts == i
 
 
@@ -437,10 +450,17 @@ _semantic_processor = _semantic_model = None
 def detect_objects(image_b64):
     im = base64_to_pil(image_b64)
     key, items, public = image_key(im), {}, []
+    # A few px of dilation on every returned mask — SAM/SegFormer selections
+    # tend to hug (or slightly undercut) the object's true edge, which used to
+    # leave a thin sliver of the object outside an edit/delete/recolor
+    # selection. This closes that gap without spilling into neighbors.
+    dilate_px = max(2, round(min(im.size) * 0.004))
+    dilate_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * dilate_px + 1, 2 * dilate_px + 1))
 
     def add(label, mask, source, confidence=None):
         if len(items) >= 80 or not mask.any():
             return
+        mask = cv2.dilate(mask.astype("uint8"), dilate_kernel, iterations=1).astype(bool)
         ys, xs = np.where(mask)
         rid = _uuid.uuid4().hex
         items[rid] = {"label": label, "mask": mask}
@@ -454,7 +474,7 @@ def detect_objects(image_b64):
 
     with MODEL_LOCK:
         sam_predictor.set_image(np.array(im))
-        for result in yolo_model(np.array(im), verbose=False, conf=0.25, max_det=40):
+        for result in yolo_model(np.array(im), verbose=False, conf=0.2, max_det=40):
             for box in result.boxes:
                 masks, scores, _ = sam_predictor.predict(box=box.xyxy[0].cpu().numpy(), multimask_output=True)
                 add(yolo_model.names[int(box.cls.item())], masks[int(np.argmax(scores))], "yolo_sam", float(box.conf.item()))
