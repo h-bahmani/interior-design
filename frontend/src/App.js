@@ -124,7 +124,7 @@ function AppInner() {
   const addObject=async(objectImage,prompt)=>{
     if(!current)return;
     const translatedPrompt=await translateToEnglish(prompt);
-    const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt:translatedPrompt,model:genModel}));
+    const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt:translatedPrompt,selection:requestSelection(),model:genModel}));
     if(data)commit(data,'add_object');
   };
   // A region_id is only valid against the image it was detected on (the
@@ -220,7 +220,7 @@ function AppInner() {
             onFurnish={prompt=>apply('/furnish-room',{prompt,selection:requestSelection()},'furnish')}/>}
           {tool==='object' && <ObjectEditor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
             onDetect={detect} onPoint={point} onEdit={(action,prompt)=>apply(action==='delete'?'/delete-object':'/edit-object',{selection:requestSelection(),prompt},action)}/>}
-          {tool==='addobject' && <AddObjectFromPhoto busy={!!busy} onAdd={addObject}/>}
+          {tool==='addobject' && <AddObjectFromPhoto image={current.image} selection={selection} onSelect={setSelection} busy={!!busy} onAdd={addObject}/>}
           {tool==='recolor' && <ObjectRecolor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
             onDetect={detect} onPoint={point} onRecolor={recolorObject}/>}
         </div>

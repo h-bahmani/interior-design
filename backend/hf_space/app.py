@@ -648,13 +648,12 @@ def furnish_room_inpaint(image_b64, furnish_prompt, selection=None, model="fast"
 
 
 @spaces.GPU(duration=60)
-def add_object_from_reference(room_image_b64, object_image_b64, placement_prompt="", model="fast", seed=42):
+def add_object_from_reference(room_image_b64, object_image_b64, placement_prompt="", selection=None, model="fast", seed=42):
     style_pipe, _ = get_pipes(model)
     params = ADD_OBJECT_PARAMS.get(model, ADD_OBJECT_PARAMS["fast"])
 
-    room_image = base64_to_pil(room_image_b64).resize((768, 768), Image.Resampling.LANCZOS)
+    original = base64_to_pil(room_image_b64)
     object_image = base64_to_pil(object_image_b64)
-    edge_image = get_canny_edges(room_image)
 
     base_prompt = (
         (placement_prompt.strip() or "place this exact item naturally in the room") +
@@ -666,21 +665,66 @@ def add_object_from_reference(room_image_b64, object_image_b64, placement_prompt
         "mismatched lighting, blurry, low quality, distorted, watermark"
     )
 
+    # A marked area lets generation stay cropped tightly around it instead of
+    # running over the whole 768x768 room: the reference image gets much
+    # stronger, more localized influence, and everything outside the crop is
+    # left byte-identical. Padding is generous (span*.7, vs localized_inpaint's
+    # span*.38) since this places a whole new object, which needs real room to
+    # render in — not just filling a hole the same size as what was removed.
+    if selection:
+        mask = selection_mask(original, selection)
+        raw = mask.astype("uint8") * 255
+        ys, xs = np.where(raw > 0)
+        if not len(xs):
+            raise ValueError("Selection is empty")
+        x1, x2, y1, y2 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+        span = max(x2 - x1, y2 - y1)
+        pad = max(64, int(span * .7))
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        side = max(320, span + 2 * pad)
+        left = max(0, cx - side // 2)
+        top = max(0, cy - side // 2)
+        right = min(original.width, left + side)
+        bottom = min(original.height, top + side)
+        left = max(0, right - side)
+        top = max(0, bottom - side)
+        crop = original.crop((left, top, right, bottom))
+    else:
+        left, top, crop = 0, 0, original
+
+    canvas_size = 768
+    room = crop.resize((canvas_size, canvas_size), Image.Resampling.LANCZOS)
+    edge_image = get_canny_edges(room)
+
     with MODEL_LOCK:
         style_pipe.set_ip_adapter_scale(0.85)
         r = style_pipe(
             prompt=base_prompt + QUALITY_SUFFIX,
             negative_prompt=negative_prompt + QUALITY_NEGATIVE,
-            image=room_image, control_image=edge_image, strength=0.55,
+            image=room, control_image=edge_image, strength=0.55,
             ip_adapter_image=object_image,
             num_inference_steps=40, guidance_scale=params["guidance_scale"],
             controlnet_conditioning_scale=params["controlnet_conditioning_scale"],
-            height=768, width=768,
+            height=canvas_size, width=canvas_size,
             generator=torch.Generator(device="cuda").manual_seed(seed),
         ).images[0]
         style_pipe.set_ip_adapter_scale(0.0)
 
-    return {"image": pil_to_base64(r), "mime_type": "image/png"}
+    if selection:
+        gen_crop = r.resize(crop.size, Image.Resampling.LANCZOS)
+        w, h = crop.size
+        feather = max(12, round(min(w, h) * .05))
+        inset = np.zeros((h, w), dtype=np.uint8)
+        f = min(feather, (min(w, h) - 1) // 2)
+        inset[f:h - f, f:w - f] = 255
+        alpha = cv2.GaussianBlur(inset, (0, 0), max(1, feather / 2))
+        final = original.copy()
+        final.paste(Image.composite(gen_crop, crop, Image.fromarray(alpha)), (left, top))
+        result = final
+    else:
+        result = r
+
+    return {"image": pil_to_base64(result), "mime_type": "image/png"}
 
 
 print("Generation functions ready")
@@ -875,7 +919,8 @@ async def add_object_route(request: Request):
     with MODEL_LOCK:
         return finish(add_object_from_reference(pil_to_base64(base64_to_pil(room_image)),
                                                  pil_to_base64(base64_to_pil(object_image)),
-                                                 data.get("prompt", ""), request_model(data), request_seed(data)))
+                                                 data.get("prompt", ""), data.get("selection"),
+                                                 request_model(data), request_seed(data)))
 
 
 print("REST API defined —", len(api.routes), "routes registered")
