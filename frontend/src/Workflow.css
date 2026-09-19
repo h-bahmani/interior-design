@@ -8,6 +8,7 @@
 .tool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:12px;margin:20px 0}
 .tool-grid button{text-align:left}.tool-grid small,.tool-grid strong{display:block;margin:7px 0}
 .field-label{display:block;margin:20px 0}.field-label textarea{display:block;width:100%;min-height:95px;box-sizing:border-box;background:#222;border:1px solid #666;color:#fff;border-radius:8px;padding:12px;margin-top:8px;font:inherit;resize:vertical}
+.field-hint{font-size:13px;color:#999;line-height:1.6;margin:-8px 0 16px;padding:10px 12px;background:#1c1c1c;border:1px solid #443a22;border-radius:8px}.field-hint strong{color:#e6b846;font-weight:600}
 .tool-panel .primary-action{background:#c9a84c;color:#151515;font-weight:600;margin:10px 0}
 .current-room{display:block;max-width:100%;max-height:460px;margin:22px auto;object-fit:contain;border-radius:12px}
 .selection-canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;border-radius:10px}

@@ -62,9 +62,16 @@ export default function StyleSelector({ image, busy, onGenerate, onPreview, onUs
       </label>
     </>}
 
-    {mode === 'custom' && <label className="field-label">Describe the design style
-      <textarea value={prompt} maxLength={600} disabled={busy} onChange={e => setPrompt(e.target.value)} placeholder="Simple geometric forms with natural textures…" />
-    </label>}
+    {mode === 'custom' && <>
+      <label className="field-label">Describe the design style
+        <textarea value={prompt} maxLength={600} disabled={busy} onChange={e => setPrompt(e.target.value)} placeholder="Simple geometric forms with natural textures…" />
+      </label>
+      <p className="field-hint">
+        This changes the whole room's style/decor and keeps the same walls, doors and furniture layout —
+        it can't remove, resize or recolor one specific object. For that, use <strong>Object Editing / Deleting</strong>
+        (remove or replace a selected object) or <strong>Object Recolor</strong> (change one object's color) instead.
+      </p>
+    </>}
 
     {mode === 'colors' && <p>The room's layout, furniture and structure stay exactly as they are — only wall and decor colors change. Pick a palette below, then apply.</p>}
 
