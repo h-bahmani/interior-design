@@ -51,6 +51,30 @@
   color: var(--gold);
 }
 
+/* Animate Trigger Button */
+.anim-trigger-btn {
+  position: absolute;
+  bottom: 48px;
+  left: 12px;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  padding: 7px 14px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  backdrop-filter: blur(4px);
+  transition: all 0.2s;
+  z-index: 10;
+}
+
+.anim-trigger-btn:hover {
+  background: rgba(201, 168, 76, 0.3);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
 /* Action Buttons */
 .result-actions {
   display: flex;
@@ -370,6 +394,7 @@
 
   /* Zoom trigger button: larger touch target */
   .zoom-trigger-btn { padding: 10px 16px; font-size: 12px; bottom: 44px; }
+  .anim-trigger-btn { padding: 10px 16px; font-size: 12px; bottom: 44px; }
 }
 
 @media (max-width: 480px) {
