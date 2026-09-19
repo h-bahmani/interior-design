@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
+import TransformAnimation from "./TransformAnimation";
 import "./ResultView.css";
 
 
 
 export default function ResultView({ original, generated, style, onReset, onNewStyle, onUndo, canUndo, onRegisterDownload }) {
   const [zoomOpen, setZoomOpen] = useState(false);
+  const [animOpen, setAnimOpen] = useState(false);
   const [zoomScale, setZoomScale] = useState(1);
   const [zoomPos, setZoomPos] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -150,6 +152,13 @@ export default function ResultView({ original, generated, style, onReset, onNewS
         >
           ⤢ Zoom
         </button>
+        <button
+          className="anim-trigger-btn"
+          onClick={() => setAnimOpen(true)}
+          title="Animate the before/after transformation"
+        >
+          ▶ Animate
+        </button>
       </motion.div>
 
       {/* Action Buttons */}
@@ -291,6 +300,14 @@ export default function ResultView({ original, generated, style, onReset, onNewS
           </motion.div>
         )}
       </AnimatePresence>
+
+      <TransformAnimation
+        original={original}
+        generated={generated}
+        style={style}
+        open={animOpen}
+        onClose={() => setAnimOpen(false)}
+      />
     </div>
   );
 }
