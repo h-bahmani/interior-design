@@ -18,7 +18,7 @@ import { translateToEnglish } from './utils/translate';
 import './App.css';
 import './Workflow.css';
 
-const TOOLS = [['style','8 Design Styles'],['furnish','Furnish Rooms'],['object','Object Editing / Deleting'],['addobject','Add Object From Photo'],['recolor','Object Recolor']];
+const TOOLS = [['style','16 Design Styles'],['furnish','Furnish Rooms'],['object','Object Editing / Deleting'],['addobject','Add Object From Photo'],['recolor','Object Recolor']];
 function AppInner() {
   const toast=useToast();
   const [user,setUser]=useState(null), [authChecked,setAuthChecked]=useState(false);
