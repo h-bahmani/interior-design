@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import RegionSelector from './RegionSelector';
+import RecolorPreview from './RecolorPreview';
 import './ObjectRecolor.css';
 
 const PRESET_COLORS = [
@@ -20,6 +21,8 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
     <p>Select an object or surface, then change only its color. Lighting, texture and shape are preserved.</p>
     <button disabled={busy} onClick={onDetect}>{regions.length?'Detect areas again':'Detect objects and surfaces'}</button>
     <RegionSelector image={image} regions={regions} selection={selection} onSelect={onSelect} onPoint={onPoint} busy={busy} />
+
+    <RecolorPreview image={image} regions={regions} selection={selection} color={color} strength={strength} />
 
     <div className="recolor-presets" aria-label="Preset object colors">
       {PRESET_COLORS.map(([label,value])=><button type="button" key={value} disabled={busy} aria-pressed={color===value}

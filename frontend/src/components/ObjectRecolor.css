@@ -7,3 +7,5 @@
 .object-recolor input[type=color]{width:100%;height:46px;padding:3px;background:#222;border:1px solid #655833;border-radius:8px;cursor:pointer}
 .object-recolor input[type=range]{width:100%;accent-color:#e6b846}
 @media(max-width:650px){.object-recolor .recolor-controls{grid-template-columns:1fr}}
+.recolor-preview{margin:16px 0}
+.recolor-preview-canvas{display:block;width:100%;height:auto;max-height:480px;object-fit:contain;border-radius:10px;border:1px solid #655833;background:#111}
