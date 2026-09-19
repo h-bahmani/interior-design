@@ -15,6 +15,7 @@ import { ToastProvider, useToast } from './components/Toast';
 import { getApiUrl } from './config';
 import { apiRequest, imageSource } from './services/api';
 import { translateToEnglish } from './utils/translate';
+import { downscaleImage } from './utils/downscaleImage';
 import './App.css';
 import './Workflow.css';
 
@@ -103,7 +104,10 @@ function AppInner() {
   const upload=async file=>{
     if(!['image/jpeg','image/png','image/webp'].includes(file.type)){toast('Choose JPG, PNG or WEBP.','error');return;}
     if(file.size>24*1024*1024){toast('Choose an image smaller than 24 MB.','error');return;}
-    const data=await run('Uploading room…',request=>{const form=new FormData();form.append('image',file);return request('/upload',form);});
+    let sized;
+    try{sized=await downscaleImage(file);}
+    catch{toast('Could not read this image file.','error');return;}
+    const data=await run('Uploading room…',request=>{const form=new FormData();form.append('image',sized);return request('/upload',form);});
     if(data){const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label:'original'};
       setCurrent(next);setOriginal(next);setBefore(null);setHistory([]);invalidate();}
   };

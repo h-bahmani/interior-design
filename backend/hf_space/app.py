@@ -86,12 +86,20 @@ def base64_to_pil(value):
         raise ValueError("image must be base64")
     try:
         raw = base64.b64decode(value.split(",", 1)[-1], validate=True)
-        with Image.open(io.BytesIO(raw)) as im:
-            if im.width * im.height > 16_000_000:
-                raise ValueError("Image exceeds 16 megapixels")
-            return ImageOps.exif_transpose(im).convert("RGB")
     except Exception as exc:
-        raise ValueError("Invalid image; use PNG or JPEG, max 16 megapixels") from exc
+        raise ValueError("Invalid base64 image data") from exc
+    try:
+        im = Image.open(io.BytesIO(raw))
+        im.load()  # actual decode failures surface here, not in the lazy open()
+    except Exception as exc:
+        # common cause: HEIC (iPhone camera default) — Pillow can't open it without a plugin
+        raise ValueError("Could not read this file as an image; use JPEG, PNG or WEBP (not HEIC/HEIF)") from exc
+    if im.width * im.height > 16_000_000:
+        raise ValueError(
+            f"Image is {im.width}x{im.height} ({im.width * im.height / 1_000_000:.1f} megapixels); "
+            "max is 16 megapixels — a modern phone photo can exceed this, resize it first"
+        )
+    return ImageOps.exif_transpose(im).convert("RGB")
 
 
 def pil_to_base64(im):
