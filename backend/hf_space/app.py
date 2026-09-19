@@ -627,6 +627,49 @@ def recolor_object(image_b64, selection, color, strength=.85):
     return {"image": pil_to_base64(Image.fromarray(out)), "mime_type": "image/png"}
 
 
+# Pure OpenCV, like recolor_object — no model. Tiles the reference texture
+# over the selected region, then multiplies it by that region's own local
+# lighting (relative to its own mean) so real shadows/highlights on the
+# surface show through instead of the texture looking flatly pasted on.
+# Known limitation: simple tiling, no perspective correction — best for a
+# wall facing roughly toward the camera.
+def apply_texture(image_b64, selection, texture_b64, opacity=.85):
+    if not isinstance(opacity, (int, float)) or not 0 <= float(opacity) <= 1:
+        raise ValueError("opacity must be between 0 and 1")
+    im = base64_to_pil(image_b64)
+    texture = base64_to_pil(texture_b64)
+
+    with MODEL_LOCK:
+        mask = selection_mask(im, selection)
+        rgb = np.array(im).astype(np.float32)
+        gray = cv2.cvtColor(np.array(im), cv2.COLOR_RGB2GRAY).astype(np.float32)
+
+        ys, xs = np.where(mask)
+        y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+        region_h, region_w = y1 - y0, x1 - x0
+
+        tw, th = texture.size
+        tiles_x = int(np.ceil(region_w / tw)) + 1
+        tiles_y = int(np.ceil(region_h / th)) + 1
+        tiled = Image.new("RGB", (tw * tiles_x, th * tiles_y))
+        for ty in range(tiles_y):
+            for tx in range(tiles_x):
+                tiled.paste(texture, (tx * tw, ty * th))
+        tiled_rgb = np.array(tiled.crop((0, 0, region_w, region_h))).astype(np.float32)
+
+        local_gray = gray[y0:y1, x0:x1]
+        local_mean = max(1.0, local_gray[mask[y0:y1, x0:x1]].mean())
+        lighting = np.clip(local_gray / local_mean, .35, 1.8)[..., None]
+        lit_texture = np.clip(tiled_rgb * lighting, 0, 255)
+
+        out = rgb.copy()
+        edge = max(1, round(min(im.size) * .004))
+        region_mask = cv2.GaussianBlur(mask[y0:y1, x0:x1].astype(np.float32) * float(opacity), (0, 0), edge)[..., None]
+        out[y0:y1, x0:x1] = lit_texture * region_mask + rgb[y0:y1, x0:x1] * (1 - region_mask)
+
+    return {"image": pil_to_base64(Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))), "mime_type": "image/png"}
+
+
 def resolve_selection(image_b64, data):
     selection = data.get("selection")
     if selection:
@@ -811,7 +854,7 @@ def capabilities():
     return {
         "api_version": 2, "styles": list(STYLE_PROMPTS), "models": ["fast", "quality"],
         "current_model": None,
-        "operations": ["style", "furnish", "detect", "edit", "delete", "add-object", "recolor"],
+        "operations": ["style", "furnish", "detect", "edit", "delete", "add-object", "recolor", "texture"],
         "selection": ["region_id", "mask", "bbox", "point", "points"],
         "coordinates": "normalized", "furnish_requires_selection": False,
         "output_mime_type": "image/png",
@@ -908,6 +951,19 @@ async def recolor_object_route(request: Request):
         image_b64 = request_image(data)
         selection = resolve_selection(image_b64, data)
         return finish(recolor_object(image_b64, selection, data.get("color"), data.get("strength", .85)))
+
+
+@api.post("/apply-texture")
+async def apply_texture_route(request: Request):
+    data = await request.json()
+    texture = data.get("texture")
+    if not texture:
+        raise ValueError("texture image required")
+    with MODEL_LOCK:
+        image_b64 = request_image(data)
+        selection = resolve_selection(image_b64, data)
+        return finish(apply_texture(image_b64, selection, pil_to_base64(base64_to_pil(texture)),
+                                     data.get("opacity", .85)))
 
 
 @api.post("/furnish-room")

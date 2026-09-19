@@ -138,6 +138,7 @@ function AppInner() {
     return region?.mask ? {mask:region.mask} : selection;
   };
   const recolorObject=(color,strength)=>apply('/recolor-object',{selection:requestSelection(),color,strength},'recolor');
+  const applyTexture=(texture,opacity)=>apply('/apply-texture',{selection:requestSelection(),texture,opacity},'texture');
   const detect=async()=>{
     const data=await run('Finding objects and surfaces…',request=>request('/detect-objects',{image:current.image}));
     if(data){setRegions(data.regions || []);setSelection(null);if(!data.regions?.length)toast('No areas found. Try clicking an area or drawing a rectangle.','info');}
@@ -222,7 +223,7 @@ function AppInner() {
             onDetect={detect} onPoint={point} onEdit={(action,prompt)=>apply(action==='delete'?'/delete-object':'/edit-object',{selection:requestSelection(),prompt},action)}/>}
           {tool==='addobject' && <AddObjectFromPhoto image={current.image} selection={selection} onSelect={setSelection} busy={!!busy} onAdd={addObject}/>}
           {tool==='recolor' && <ObjectRecolor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
-            onDetect={detect} onPoint={point} onRecolor={recolorObject}/>}
+            onDetect={detect} onPoint={point} onRecolor={recolorObject} onTexture={applyTexture}/>}
         </div>
         {current!==original && <fieldset className="result-fieldset" disabled={!!busy}>
           <ResultView original={original.image} key={version} generated={current.image} style={current.label} onReset={reset}
