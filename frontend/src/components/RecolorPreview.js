@@ -9,13 +9,8 @@ const loadImg = (src) => new Promise((resolve, reject) => {
   im.src = src;
 });
 
-// Client-side, no backend call: an approximation of the real recolor_object
-// (LAB a/b blend) and apply_texture (tiled swatch, lit by local luminance),
-// run against a downscaled canvas so the user can try a color+texture combo
-// instantly across every selected area instead of waiting on a real
-// generation for each guess. No edge feathering (unlike the real ops), and
-// texture tiles from a fixed global origin rather than per-region — close
-// enough for "does this combination look right", not the final image.
+// Client-side approximation of recolor_object/apply_texture (no feathering, texture
+// tiles from a fixed origin) — good enough to preview, not the final generated image.
 const PREVIEW_MAX_DIM = 640;
 
 async function maskDataFor(selection, regions, cw, ch) {

@@ -416,16 +416,12 @@ print("Style prompts ready:", list(STYLE_PROMPTS))
 # ============================================================
 
 
-# post_process_semantic_segmentation() only returns the per-pixel argmax class, with no
-# confidence — so a spatially-confused, low-confidence guess (the model unsure between
-# "cabinet", "wardrobe" and "wall" near some paneling) is treated exactly like a
-# confident one and shows up as a real detected region (reported: a "cabinet" region
-# was actually a blob straddling the TV and wall). Fix: replicate what post_process does
-# (bilinear-upsample logits to the image size, then argmax) but keep the softmax
-# probabilities too, and reject a connected component if its own mean confidence is
-# below min_confidence. Threshold is deliberately modest — ADE20K has 150 classes, so
-# even a correct prediction often isn't hugely confident, and being too strict here
-# would just recreate the earlier "detection catches too little" complaint.
+# post_process_semantic_segmentation() only returns the argmax class with no confidence,
+# so a spatially-confused guess gets treated like a confident one (reported: a "cabinet"
+# region was actually a blob straddling the TV and wall). Below replicates its own
+# upsample-then-argmax but keeps the softmax probabilities, rejecting a connected
+# component whose mean confidence is too low. 0.35 is deliberately modest — ADE20K has
+# 150 classes, so a correct prediction often isn't hugely confident either.
 def semantic_regions(im, min_confidence=0.35):
     global _semantic_processor, _semantic_model
     if _semantic_model is None:
@@ -651,12 +647,8 @@ def recolor_object(image_b64, selection, color, strength=.85):
     return {"image": pil_to_base64(Image.fromarray(out)), "mime_type": "image/png"}
 
 
-# Pure OpenCV, like recolor_object — no model. Tiles the reference texture
-# over the selected region, then multiplies it by that region's own local
-# lighting (relative to its own mean) so real shadows/highlights on the
-# surface show through instead of the texture looking flatly pasted on.
-# Known limitation: simple tiling, no perspective correction — best for a
-# wall facing roughly toward the camera.
+# Unlike recolor_object, tiles an actual texture image (with perspective left
+# uncorrected) instead of just shifting color — for wallpaper/tile/fabric patterns.
 def apply_texture(image_b64, selection, texture_b64, opacity=.85):
     if not isinstance(opacity, (int, float)) or not 0 <= float(opacity) <= 1:
         raise ValueError("opacity must be between 0 and 1")
@@ -694,12 +686,8 @@ def apply_texture(image_b64, selection, texture_b64, opacity=.85):
     return {"image": pil_to_base64(Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))), "mime_type": "image/png"}
 
 
-# apply_texture (above) is for when the user has their own texture photo.
-# This is the opposite: no upload needed, just pick "stone" or "velvet" and
-# the model generates it — uses localized_inpaint (same as furnish_room)
-# with a pre-written prompt instead of apply_texture's pure-OpenCV tiling.
-# category (surface vs furniture) lets the frontend only show materials relevant
-# to what's selected — a brick-wall swatch in a sofa's material list was confusing.
+# category lets the frontend only offer materials relevant to what's selected
+# (leather for furniture, brick for walls) instead of one mixed list.
 TEXTURE_PROMPTS = {
     "natural_stone": {"category": "surface", "prompt": "natural stone cladding, cool grey and beige veined marble texture, polished stone surface, subtle natural veining pattern"},
     "wood_paneling": {"category": "surface", "prompt": "warm wood paneling, vertical oak wood slats, natural wood grain texture, honey brown tone"},
@@ -793,12 +781,9 @@ def add_object_from_reference(room_image_b64, object_image_b64, placement_prompt
         "mismatched lighting, blurry, low quality, distorted, watermark"
     )
 
-    # A marked area lets generation stay cropped tightly around it instead of
-    # running over the whole 768x768 room: the reference image gets much
-    # stronger, more localized influence, and everything outside the crop is
-    # left byte-identical. Padding is generous (span*.7, vs localized_inpaint's
-    # span*.38) since this places a whole new object, which needs real room to
-    # render in — not just filling a hole the same size as what was removed.
+    # Cropping tightly around the selection gives the reference image much stronger,
+    # localized influence; padding is generous (span*.7) since this places a whole new
+    # object, not just filling a hole.
     if selection:
         mask = selection_mask(original, selection)
         raw = mask.astype("uint8") * 255

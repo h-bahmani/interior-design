@@ -1,11 +1,7 @@
 import { useState } from 'react';
 
-// Fast, low-res, few-step drafts — a moodboard to browse before committing
-// GPU time to one full-quality generation. Not a final result on its own;
-// clicking a thumbnail just selects that style. Previewing all 16 at once
-// was slow enough to hit the request timeout and return nothing, so this
-// lets you pick a handful instead — fewer generations, same fast-per-style
-// quality, actually finishes.
+// Fast, low-res drafts to browse before committing to a full-quality generation.
+// Previewing all 16 at once hit the request timeout, so pick a handful instead.
 export default function StyleGallery({ styles, busy, palette, onExplore, onSelectStyle, selected }) {
   const [picked, setPicked] = useState(() => new Set(styles.slice(0, 6).map(s => s.id)));
   const [previews, setPreviews] = useState(null);
