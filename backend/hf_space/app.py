@@ -225,7 +225,7 @@ def selection_mask(im, selection):
 NEGATIVE = "blurry, distorted, watermark, changed architecture, extra objects"
 
 
-def localized_inpaint(im, mask, prompt, seed, negative, expand_px, feather_px, inpaint_pipe):
+def localized_inpaint(im, mask, prompt, seed, negative, expand_px, feather_px, inpaint_pipe, strength=.98):
     raw = mask.astype("uint8") * 255
     if expand_px:
         k = 2 * expand_px + 1
@@ -254,7 +254,7 @@ def localized_inpaint(im, mask, prompt, seed, negative, expand_px, feather_px, i
 
     out = inpaint_pipe(
         prompt=prompt, negative_prompt=negative, image=canvas, mask_image=mask512,
-        height=512, width=512, strength=.98, num_inference_steps=45, guidance_scale=9,
+        height=512, width=512, strength=strength, num_inference_steps=45, guidance_scale=9,
         generator=torch.Generator(device="cuda").manual_seed(seed),
     ).images[0]
 
@@ -697,6 +697,10 @@ TEXTURE_PROMPTS = {
 }
 
 
+# strength=.98 (edit_object/furnish_room's default) is a near-total repaint — for a
+# material swap that let the model ignore the underlying object's shape entirely and
+# hallucinate an unrelated blob on small/irregular selections. Lower strength keeps
+# the img2img pass anchored to the original structure while still changing the surface.
 @spaces.GPU(duration=60)
 def generate_texture(image_b64, selection, texture_name, model="fast", seed=42):
     _, inpaint_pipe = get_pipes(model)
@@ -707,9 +711,9 @@ def generate_texture(image_b64, selection, texture_name, model="fast", seed=42):
         mask = selection_mask(im, selection)
         p = (TEXTURE_PROMPTS[texture_name]["prompt"] +
              ", seamless repeating texture, realistic material, matching existing lighting and shadows" + QUALITY_SUFFIX)
-        neg = (ARTIFACT_NEGATIVE_LEAD + ", changed room style, changed furniture, different material" +
+        neg = (ARTIFACT_NEGATIVE_LEAD + ", changed room style, changed furniture, different material, new object" +
                QUALITY_NEGATIVE + TAIL_NEGATIVE)
-        r = localized_inpaint(im, mask, p, seed, neg, 6, 6, inpaint_pipe)
+        r = localized_inpaint(im, mask, p, seed, neg, 6, 6, inpaint_pipe, strength=.6)
     return {"image": pil_to_base64(r), "mime_type": "image/png"}
 
 

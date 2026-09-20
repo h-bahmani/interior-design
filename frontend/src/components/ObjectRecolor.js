@@ -17,17 +17,17 @@ const PRESET_COLORS = [
 // category filters which materials are offered: no point showing "exposed brick" for
 // a sofa, or "leather" for a wall.
 const PRESET_TEXTURES = [
-  { id:'leather', label:'Leather', category:'furniture' },
-  { id:'velvet_fabric', label:'Velvet Fabric', category:'furniture' },
-  { id:'linen_fabric', label:'Linen Fabric', category:'furniture' },
-  { id:'suede', label:'Suede', category:'furniture' },
-  { id:'rattan_wicker', label:'Rattan / Wicker', category:'furniture' },
-  { id:'natural_stone', label:'Natural Stone', category:'surface' },
-  { id:'wood_paneling', label:'Wood Paneling', category:'surface' },
-  { id:'exposed_brick', label:'Exposed Brick', category:'surface' },
-  { id:'exposed_concrete', label:'Exposed Concrete', category:'surface' },
-  { id:'geometric_wallpaper', label:'Geometric Wallpaper', category:'surface' },
-  { id:'ceramic_tile', label:'Ceramic Tile', category:'surface' },
+  { id:'leather', label:'Leather', category:'furniture', desc:'Smooth genuine leather, natural grain and stitched seams' },
+  { id:'velvet_fabric', label:'Velvet Fabric', category:'furniture', desc:'Plush deep-pile velvet with a soft, rich sheen' },
+  { id:'linen_fabric', label:'Linen Fabric', category:'furniture', desc:'Woven natural linen, soft matte texture' },
+  { id:'suede', label:'Suede', category:'furniture', desc:'Soft napped suede with a warm matte finish' },
+  { id:'rattan_wicker', label:'Rattan / Wicker', category:'furniture', desc:'Woven natural cane, warm and textural' },
+  { id:'natural_stone', label:'Natural Stone', category:'surface', desc:'Polished stone with subtle natural veining' },
+  { id:'wood_paneling', label:'Wood Paneling', category:'surface', desc:'Vertical oak slats with visible wood grain' },
+  { id:'exposed_brick', label:'Exposed Brick', category:'surface', desc:'Weathered brick with visible mortar lines' },
+  { id:'exposed_concrete', label:'Exposed Concrete', category:'surface', desc:'Raw, smooth industrial concrete finish' },
+  { id:'geometric_wallpaper', label:'Geometric Wallpaper', category:'surface', desc:'Art-deco geometric print, gold on cream' },
+  { id:'ceramic_tile', label:'Ceramic Tile', category:'surface', desc:'Glossy white subway tile, thin grout lines' },
 ];
 
 const FURNITURE_LABEL = /sofa|couch|chair|armchair|loveseat|\bbed\b|ottoman|stool|\bbench\b|recliner|sectional|cushion/i;
@@ -93,7 +93,7 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
   };
 
   const textureButton = t => <button type="button" key={t.id} disabled={busy} aria-pressed={texturePreset===t.id}
-    onClick={()=>setTexturePreset(t.id)} title={t.label}>
+    onClick={()=>setTexturePreset(t.id)} data-tooltip={t.desc}>
     <span className="swatch-thumb" style={{backgroundImage:`url(${swatchDataUrl(t.id)})`}} aria-hidden="true"/><small>{t.label}</small>
   </button>;
 

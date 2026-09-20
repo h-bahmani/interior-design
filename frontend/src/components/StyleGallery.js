@@ -33,7 +33,9 @@ export default function StyleGallery({ styles, busy, palette, onExplore, onSelec
     <div className="style-gallery-picks">
       {styles.map(s => (
         <button type="button" key={s.id} className="style-gallery-pick" aria-pressed={picked.has(s.id)}
-          disabled={busy || loading} onClick={() => toggle(s.id)}>{s.emoji} {s.name}</button>
+          disabled={busy || loading} onClick={() => toggle(s.id)} data-tooltip={s.desc}>
+          <span className="pick-dot" style={{background:s.color}} aria-hidden="true"/>{s.emoji} {s.name}
+        </button>
       ))}
     </div>
     <button type="button" className="primary-action" disabled={busy || loading || picked.size === 0} onClick={explore}>

@@ -14,4 +14,8 @@
 .object-recolor .recolor-block{background:#1c1a14;border:1px solid #3a331f;border-radius:12px;padding:16px;margin:14px 0}
 .object-recolor .preset-group-label{color:#bbb;font-size:.82rem;margin:14px 0 8px;font-weight:600}
 .object-recolor .preset-group-label:first-of-type{margin-top:6px}
-.object-recolor .texture-presets .swatch-thumb{width:34px;height:34px;border-radius:8px;background-size:cover;background-position:center;border:1px solid rgba(255,255,255,.28);flex:0 0 auto}
+.object-recolor .texture-presets .swatch-thumb{position:relative;width:34px;height:34px;border-radius:8px;background-size:cover;background-position:center;border:1px solid rgba(255,255,255,.28);flex:0 0 auto}
+.object-recolor .recolor-presets button[aria-pressed=true]{box-shadow:0 0 0 2px rgba(230,184,70,.3)}
+.object-recolor .texture-presets button[aria-pressed=true] .swatch-thumb::after{
+  content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(20,17,10,.4);color:#ffe6a0;font-weight:700;font-size:15px;border-radius:7px}

@@ -64,8 +64,8 @@ const PAINTERS = {
     }
   },
   geometric_wallpaper(ctx, w, h) {
-    ctx.fillStyle = '#efe6d2'; ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#c9a84c'; ctx.lineWidth = 1.4;
+    ctx.fillStyle = '#e3d5a8'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#a9822f'; ctx.lineWidth = 2;
     const step = w / 4;
     for (let y = -step; y < h + step; y += step) {
       for (let x = -step; x < w + step; x += step) {
@@ -76,13 +76,18 @@ const PAINTERS = {
     }
   },
   ceramic_tile(ctx, w, h) {
-    ctx.fillStyle = '#f2f0ec'; ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = 'rgba(150,150,150,.5)'; ctx.lineWidth = 1.5;
+    ctx.fillStyle = '#e4e0d6'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(110,110,105,.7)'; ctx.lineWidth = 2;
     const step = w / 3;
     for (let i = 1; i < 3; i++) {
       ctx.beginPath(); ctx.moveTo(i * step, 0); ctx.lineTo(i * step, h); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, i * step); ctx.lineTo(w, i * step); ctx.stroke();
     }
+    // a soft glossy diagonal highlight so it doesn't read as a flat empty square
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, 'rgba(255,255,255,.35)'); grad.addColorStop(0.35, 'rgba(255,255,255,0)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(80,80,75,.9)'; ctx.lineWidth = 1.5; ctx.strokeRect(0.75, 0.75, w - 1.5, h - 1.5);
   },
   leather(ctx, w, h) {
     ctx.fillStyle = '#7a4a2a'; ctx.fillRect(0, 0, w, h);
