@@ -25,7 +25,8 @@ function AppInner() {
   const [user,setUser]=useState(null), [authChecked,setAuthChecked]=useState(false);
   const [apiUrl,setApiUrl]=useState(getApiUrl), [setup,setSetup]=useState(false), [connection,setConnection]=useState('checking');
   const [current,setCurrent]=useState(null), [original,setOriginal]=useState(null), [before,setBefore]=useState(null);
-  const [history,setHistory]=useState([]), [showHistory,setShowHistory]=useState(false);
+  const [history,setHistory]=useState([]), [showHistory,setShowHistory]=useState(false), [showMenu,setShowMenu]=useState(false);
+  const menuRef=useRef(null);
   const [tool,setTool]=useState('style'), [regions,setRegions]=useState([]), [selection,setSelection]=useState(null);
   const [busy,setBusy]=useState(''), [version,setVersion]=useState(0);
   const [genModel,setGenModel]=useState(()=>localStorage.getItem('interiorai_gen_model')||'fast');
@@ -165,7 +166,7 @@ function AppInner() {
   useEffect(()=>{
     const handler=e=>{
       if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable)return;
-      if(e.key==='Escape')setShowHistory(false);
+      if(e.key==='Escape'){setShowHistory(false);setShowMenu(false);}
       if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undo();}
       if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();download.current?.();}
       if((e.ctrlKey||e.metaKey)&&e.key==='h'){e.preventDefault();setShowHistory(v=>!v);}
@@ -174,6 +175,13 @@ function AppInner() {
     // Handler intentionally follows the currently available undo snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[before]);
+  // Closes the header menu on an outside click, without a full-screen backdrop overlay.
+  useEffect(()=>{
+    if(!showMenu)return;
+    const onClick=e=>{if(menuRef.current && !menuRef.current.contains(e.target))setShowMenu(false);};
+    document.addEventListener('mousedown',onClick);
+    return()=>document.removeEventListener('mousedown',onClick);
+  },[showMenu]);
   const registerDownload=useCallback(fn=>{download.current=fn;},[]);
   if(!authChecked)return null;
   if(!user)return <Auth onLogin={()=>{}} />;
@@ -182,13 +190,22 @@ function AppInner() {
     <div className="ambient-bg" aria-hidden="true"><div className="orb orb-1"/><div className="orb orb-2"/></div>
     <header className="header"><div className="header-inner">
       <button className="logo" disabled={!!busy} onClick={reset}><span className="logo-text">Interior<em>AI</em></span></button>
-      <div className="user-info"><button disabled={!!busy} onClick={()=>setSetup(true)}>Connection: {connection}</button>
       <div className="model-toggle" role="group" aria-label="Generation quality">
         <button aria-pressed={genModel==='fast'} disabled={!!busy} onClick={()=>changeModel('fast')} title="SD1.5 — quicker">Fast</button>
         <button aria-pressed={genModel==='quality'} disabled={!!busy} onClick={()=>changeModel('quality')} title="SDXL — slower, more photorealistic">Quality</button>
       </div>
-      <button disabled={!!busy || !history.length} onClick={()=>setShowHistory(v=>!v)}>History ({history.length})</button>
-      <span className="user-name">{user.displayName || user.email}</span><button disabled={!!busy} onClick={()=>signOut(auth)}>Sign Out</button></div>
+      <div className="header-menu" ref={menuRef}>
+        <button className="hamburger-btn" aria-haspopup="true" aria-expanded={showMenu} aria-label="Menu" onClick={()=>setShowMenu(v=>!v)}>
+          <span className={`conn-dot conn-${connection}`} aria-hidden="true"/>
+          <span className="hamburger-bars" aria-hidden="true"><span/><span/><span/></span>
+        </button>
+        {showMenu && <div className="header-dropdown" role="menu">
+          <span className="header-dropdown-user">{user.displayName || user.email}</span>
+          <button role="menuitem" disabled={!!busy} onClick={()=>{setSetup(true);setShowMenu(false);}}>Connection: {connection}</button>
+          <button role="menuitem" disabled={!!busy || !history.length} onClick={()=>{setShowHistory(v=>!v);setShowMenu(false);}}>History ({history.length})</button>
+          <button role="menuitem" disabled={!!busy} onClick={()=>signOut(auth)}>Sign Out</button>
+        </div>}
+      </div>
     </div></header>
     <main className="main">
       {connection==='incompatible' && <p role="alert">Connect the API v2 notebook before editing.</p>}

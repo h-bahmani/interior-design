@@ -258,6 +258,75 @@
   letter-spacing: 0.05em;
 }
 
+/* ─── Header hamburger menu ──────────────────────────────────
+   Connection, History, account and sign-out are all secondary to the
+   Fast/Quality toggle (used on every generation), so they collapse into
+   one menu instead of a permanently-crowded header row. */
+.header-menu { position: relative; }
+
+.hamburger-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.hamburger-btn[aria-expanded="true"] { border-color: var(--gold); }
+
+.hamburger-bars { display: flex; flex-direction: column; gap: 3px; }
+.hamburger-bars span { width: 16px; height: 2px; background: var(--text); border-radius: 1px; }
+
+.conn-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.conn-dot.conn-connected { background: #4caf82; box-shadow: 0 0 6px rgba(76, 175, 130, 0.6); }
+.conn-dot.conn-checking { background: #999; animation: pulse-dot 1.4s ease infinite; }
+.conn-dot.conn-incompatible { background: #fbbc05; }
+.conn-dot.conn-offline { background: #e05c5c; }
+
+.header-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 210px;
+  background: rgba(16, 16, 20, 0.97);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  z-index: 110;
+}
+
+.header-dropdown-user {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-dropdown button {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.header-dropdown button:hover:not(:disabled) { background: rgba(255,255,255,0.06); }
+
 .history-btn:hover {
   border-color: var(--gold);
   color: var(--gold);

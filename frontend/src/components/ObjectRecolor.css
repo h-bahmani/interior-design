@@ -9,3 +9,9 @@
 @media(max-width:650px){.object-recolor .recolor-controls{grid-template-columns:1fr}}
 .recolor-preview{margin:16px 0}
 .recolor-preview-canvas{display:block;width:100%;height:auto;max-height:480px;object-fit:contain;border-radius:10px;border:1px solid #655833;background:#111}
+.object-recolor .step-label{color:#e6b846;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin:26px 0 10px;padding-top:18px;border-top:1px solid #332c1c}
+.object-recolor .step-label:first-of-type{padding-top:0;border-top:0;margin-top:16px}
+.object-recolor .recolor-block{background:#1c1a14;border:1px solid #3a331f;border-radius:12px;padding:16px;margin:14px 0}
+.object-recolor .preset-group-label{color:#bbb;font-size:.82rem;margin:14px 0 8px;font-weight:600}
+.object-recolor .preset-group-label:first-of-type{margin-top:6px}
+.object-recolor .texture-presets .swatch-thumb{width:34px;height:34px;border-radius:8px;background-size:cover;background-position:center;border:1px solid rgba(255,255,255,.28);flex:0 0 auto}

@@ -680,15 +680,20 @@ def apply_texture(image_b64, selection, texture_b64, opacity=.85):
 # This is the opposite: no upload needed, just pick "stone" or "velvet" and
 # the model generates it — uses localized_inpaint (same as furnish_room)
 # with a pre-written prompt instead of apply_texture's pure-OpenCV tiling.
+# category (surface vs furniture) lets the frontend only show materials relevant
+# to what's selected — a brick-wall swatch in a sofa's material list was confusing.
 TEXTURE_PROMPTS = {
-    "natural_stone": "natural stone cladding, cool grey and beige veined marble texture, polished stone surface, subtle natural veining pattern",
-    "wood_paneling": "warm wood paneling, vertical oak wood slats, natural wood grain texture, honey brown tone",
-    "velvet_fabric": "plush velvet fabric texture, soft deep emerald green velvet, rich fabric weave, luxurious upholstery texture",
-    "exposed_brick": "exposed red brick wall, weathered brick texture, visible mortar lines, warm terracotta brick tones",
-    "exposed_concrete": "raw exposed concrete surface, smooth grey concrete texture, subtle form-tie marks, industrial finish",
-    "geometric_wallpaper": "geometric wallpaper pattern, repeating art deco gold and cream geometric print, elegant wall covering",
-    "ceramic_tile": "glossy ceramic subway tile, clean white tile texture, thin grey grout lines, reflective glaze",
-    "rattan_wicker": "natural rattan wicker weave texture, woven cane pattern, warm tan natural fiber texture",
+    "natural_stone": {"category": "surface", "prompt": "natural stone cladding, cool grey and beige veined marble texture, polished stone surface, subtle natural veining pattern"},
+    "wood_paneling": {"category": "surface", "prompt": "warm wood paneling, vertical oak wood slats, natural wood grain texture, honey brown tone"},
+    "exposed_brick": {"category": "surface", "prompt": "exposed red brick wall, weathered brick texture, visible mortar lines, warm terracotta brick tones"},
+    "exposed_concrete": {"category": "surface", "prompt": "raw exposed concrete surface, smooth grey concrete texture, subtle form-tie marks, industrial finish"},
+    "geometric_wallpaper": {"category": "surface", "prompt": "geometric wallpaper pattern, repeating art deco gold and cream geometric print, elegant wall covering"},
+    "ceramic_tile": {"category": "surface", "prompt": "glossy ceramic subway tile, clean white tile texture, thin grey grout lines, reflective glaze"},
+    "leather": {"category": "furniture", "prompt": "smooth genuine leather upholstery, rich cognac brown leather grain, natural creases, stitched seams"},
+    "velvet_fabric": {"category": "furniture", "prompt": "plush velvet fabric texture, soft deep emerald green velvet, rich fabric weave, luxurious upholstery texture"},
+    "linen_fabric": {"category": "furniture", "prompt": "woven linen fabric upholstery, natural oatmeal linen weave texture, soft matte finish"},
+    "suede": {"category": "furniture", "prompt": "soft suede upholstery texture, warm taupe suede nap, velvety matte finish"},
+    "rattan_wicker": {"category": "furniture", "prompt": "natural rattan wicker weave texture, woven cane pattern, warm tan natural fiber texture"},
 }
 
 
@@ -700,7 +705,7 @@ def generate_texture(image_b64, selection, texture_name, model="fast", seed=42):
     im = base64_to_pil(image_b64)
     with MODEL_LOCK:
         mask = selection_mask(im, selection)
-        p = (TEXTURE_PROMPTS[texture_name] +
+        p = (TEXTURE_PROMPTS[texture_name]["prompt"] +
              ", seamless repeating texture, realistic material, matching existing lighting and shadows" + QUALITY_SUFFIX)
         neg = (ARTIFACT_NEGATIVE_LEAD + ", changed room style, changed furniture, different material" +
                QUALITY_NEGATIVE + TAIL_NEGATIVE)

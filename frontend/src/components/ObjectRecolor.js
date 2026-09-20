@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import RegionSelector from './RegionSelector';
 import RecolorPreview from './RecolorPreview';
+import { swatchDataUrl } from '../utils/textureSwatches';
 import './ObjectRecolor.css';
 
 const PRESET_COLORS = [
@@ -12,17 +13,26 @@ const PRESET_COLORS = [
   ['Charcoal','#4C5258'],
 ];
 
-// Mirrors backend TEXTURE_PROMPTS — keep the ids in sync with that dict.
+// Mirrors backend TEXTURE_PROMPTS — keep ids and categories in sync with that dict.
+// category filters which materials are offered: no point showing "exposed brick" for
+// a sofa, or "leather" for a wall.
 const PRESET_TEXTURES = [
-  ['natural_stone', 'Natural Stone', '◈'],
-  ['wood_paneling', 'Wood Paneling', '▤'],
-  ['velvet_fabric', 'Velvet Fabric', '❋'],
-  ['exposed_brick', 'Exposed Brick', '▦'],
-  ['exposed_concrete', 'Exposed Concrete', '▧'],
-  ['geometric_wallpaper', 'Geometric Wallpaper', '◆'],
-  ['ceramic_tile', 'Ceramic Tile', '▢'],
-  ['rattan_wicker', 'Rattan / Wicker', '≈'],
+  { id:'leather', label:'Leather', category:'furniture' },
+  { id:'velvet_fabric', label:'Velvet Fabric', category:'furniture' },
+  { id:'linen_fabric', label:'Linen Fabric', category:'furniture' },
+  { id:'suede', label:'Suede', category:'furniture' },
+  { id:'rattan_wicker', label:'Rattan / Wicker', category:'furniture' },
+  { id:'natural_stone', label:'Natural Stone', category:'surface' },
+  { id:'wood_paneling', label:'Wood Paneling', category:'surface' },
+  { id:'exposed_brick', label:'Exposed Brick', category:'surface' },
+  { id:'exposed_concrete', label:'Exposed Concrete', category:'surface' },
+  { id:'geometric_wallpaper', label:'Geometric Wallpaper', category:'surface' },
+  { id:'ceramic_tile', label:'Ceramic Tile', category:'surface' },
 ];
+
+const FURNITURE_LABEL = /sofa|couch|chair|armchair|loveseat|\bbed\b|ottoman|stool|\bbench\b|recliner|sectional|cushion/i;
+const SURFACE_LABEL = /\bwall\b|ceiling|\bfloor\b|curtain|\brug\b|carpet|\bdoor\b|countertop|cabinet/i;
+const categoryFor = label => !label ? null : FURNITURE_LABEL.test(label) ? 'furniture' : SURFACE_LABEL.test(label) ? 'surface' : null;
 
 const selectionKey = s => s.region_id ? `r:${s.region_id}` : `b:${s.bbox.join(',')}`;
 
@@ -34,7 +44,7 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
   const [color,setColor]=useState('#B89B7A');
   const [strength,setStrength]=useState(.85);
   const [textureSource,setTextureSource]=useState('preset');
-  const [texturePreset,setTexturePreset]=useState('natural_stone');
+  const [texturePreset,setTexturePreset]=useState('leather');
   const [textureImage,setTextureImage]=useState(null);
   const [opacity,setOpacity]=useState(.85);
   const textureInput=useRef(null);
@@ -46,6 +56,17 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
   });
   const clearAll = () => setSelections([]);
   const targets = multi ? selections : (selection ? [selection] : []);
+
+  // If every current selection is the same kind of thing (all furniture, or all
+  // surfaces), only show materials that make sense for it. Mixed or unrecognized
+  // selections fall back to showing everything, grouped.
+  const targetCategories = new Set(targets.map(t=>t.region_id ? categoryFor(regions.find(r=>r.id===t.region_id)?.label) : null).filter(Boolean));
+  const onlyCategory = targetCategories.size===1 ? [...targetCategories][0] : null;
+  const visibleTextures = onlyCategory ? PRESET_TEXTURES.filter(t=>t.category===onlyCategory) : PRESET_TEXTURES;
+  useEffect(()=>{
+    if(!visibleTextures.some(t=>t.id===texturePreset))setTexturePreset(visibleTextures[0]?.id || 'leather');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[onlyCategory]);
 
   const chooseTexture = file => {
     if (!file || busy || !['image/jpeg','image/png','image/webp'].includes(file.type)) return;
@@ -71,33 +92,43 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
     onApply(steps);
   };
 
+  const textureButton = t => <button type="button" key={t.id} disabled={busy} aria-pressed={texturePreset===t.id}
+    onClick={()=>setTexturePreset(t.id)} title={t.label}>
+    <span className="swatch-thumb" style={{backgroundImage:`url(${swatchDataUrl(t.id)})`}} aria-hidden="true"/><small>{t.label}</small>
+  </button>;
+
   return <section className="tool-panel object-recolor">
     <h2>Object Recolor</h2>
     <p>Select one or more objects or surfaces, then change their color and/or apply a texture — both at once if you like. Lighting and shape are preserved.</p>
-    <button disabled={busy} onClick={onDetect}>{regions.length?'Detect areas again':'Detect objects and surfaces'}</button>
 
+    <p className="step-label">1. Select what to change</p>
+    <button disabled={busy} onClick={onDetect}>{regions.length?'Detect areas again':'Detect objects and surfaces'}</button>
     <div className="tool-actions" role="group" aria-label="Selection mode">
       <button disabled={busy} aria-pressed={!multi} onClick={()=>setMultiMode(false)}>Single area</button>
-      <button disabled={busy} aria-pressed={multi} onClick={()=>setMultiMode(true)}>Multiple areas</button>
+      <button disabled={busy} aria-pressed={multi} onClick={()=>setMultiMode(true)}>Multiple areas at once</button>
     </div>
-
     <RegionSelector image={image} regions={regions} busy={busy} onPoint={onPoint}
       multi={multi}
       selection={multi?undefined:selection} onSelect={multi?undefined:onSelect}
       selections={multi?selections:undefined} onToggle={multi?toggleSelection:undefined} onClearAll={multi?clearAll:undefined} />
 
+    <p className="step-label">2. Choose the change</p>
     <div className="tool-actions" role="group" aria-label="Changes to apply">
       <label className="toggle-check"><input type="checkbox" checked={useColor} disabled={busy} onChange={e=>setUseColor(e.target.checked)} /> Color</label>
-      <label className="toggle-check"><input type="checkbox" checked={useTexture} disabled={busy} onChange={e=>setUseTexture(e.target.checked)} /> Texture / Pattern</label>
+      <label className="toggle-check"><input type="checkbox" checked={useTexture} disabled={busy} onChange={e=>setUseTexture(e.target.checked)} /> Texture / Material</label>
     </div>
 
     <RecolorPreview image={image} regions={regions} selections={targets}
       useColor={useColor} color={color} strength={strength}
-      useTexture={useTexture && textureSource==='upload'} textureImage={textureSource==='upload'?textureImage:null} opacity={opacity} />
+      useTexture={useTexture} textureImage={useTexture ? (textureSource==='upload' ? textureImage : swatchDataUrl(texturePreset)) : null}
+      opacity={textureSource==='upload' ? opacity : 0.92} />
     {useTexture && textureSource==='preset' &&
-      <p className="field-hint">AI-generated textures need a real generation — no instant preview for this one, only for an uploaded swatch.</p>}
+      <p className="field-hint">
+        Preview uses a generic sample of this material, not your room's actual generation — real result will have more
+        detail and may vary. Click "Generate with AI" material buttons below to change which one previews.
+      </p>}
 
-    {useColor && <>
+    {useColor && <div className="recolor-block">
       <div className="recolor-presets" aria-label="Preset object colors">
         {PRESET_COLORS.map(([label,value])=><button type="button" key={value} disabled={busy} aria-pressed={color===value}
           onClick={()=>setColor(value)} title={label}>
@@ -110,9 +141,9 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
           <input type="range" min="0.2" max="1" step="0.05" value={strength} disabled={busy} onChange={e=>setStrength(Number(e.target.value))}/>
         </label>
       </div>
-    </>}
+    </div>}
 
-    {useTexture && <>
+    {useTexture && <div className="recolor-block">
       <div className="tool-actions" role="group" aria-label="Texture source">
         <button disabled={busy} aria-pressed={textureSource==='preset'} onClick={()=>setTextureSource('preset')}>Generate with AI</button>
         <button disabled={busy} aria-pressed={textureSource==='upload'} onClick={()=>setTextureSource('upload')}>Upload My Own</button>
@@ -121,14 +152,17 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
       {textureSource==='preset' && <>
         <p className="field-hint">
           Pick a material and the model generates it directly on each selected area — no photo needed.
-          Uses the same technology as Object Editing, so it can take a similar amount of time per try.
+          {onlyCategory && ` Showing materials for ${onlyCategory === 'furniture' ? 'furniture & upholstery' : 'walls & surfaces'} since that's what's selected.`}
+          {' '}Uses the same technology as Object Editing, so it can take a similar amount of time per try.
         </p>
-        <div className="recolor-presets" aria-label="Preset textures">
-          {PRESET_TEXTURES.map(([id,label,icon])=><button type="button" key={id} disabled={busy} aria-pressed={texturePreset===id}
-            onClick={()=>setTexturePreset(id)} title={label}>
-            <span aria-hidden="true">{icon}</span><small>{label}</small>
-          </button>)}
-        </div>
+        {onlyCategory ? (
+          <div className="recolor-presets texture-presets" aria-label="Preset textures">{visibleTextures.map(textureButton)}</div>
+        ) : <>
+          <p className="preset-group-label">Furniture &amp; upholstery</p>
+          <div className="recolor-presets texture-presets" aria-label="Furniture textures">{PRESET_TEXTURES.filter(t=>t.category==='furniture').map(textureButton)}</div>
+          <p className="preset-group-label">Walls &amp; surfaces</p>
+          <div className="recolor-presets texture-presets" aria-label="Surface textures">{PRESET_TEXTURES.filter(t=>t.category==='surface').map(textureButton)}</div>
+        </>}
       </>}
 
       {textureSource==='upload' && <>
@@ -152,8 +186,9 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
           </label>
         </div>
       </>}
-    </>}
+    </div>}
 
+    <p className="step-label">3. Apply</p>
     <button className="primary-action" disabled={!canApply} onClick={applyChanges}>
       {targets.length>1 ? `Apply to ${targets.length} areas` : 'Apply changes'}
     </button>
