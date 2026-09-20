@@ -416,7 +416,17 @@ print("Style prompts ready:", list(STYLE_PROMPTS))
 # ============================================================
 
 
-def semantic_regions(im):
+# post_process_semantic_segmentation() only returns the per-pixel argmax class, with no
+# confidence — so a spatially-confused, low-confidence guess (the model unsure between
+# "cabinet", "wardrobe" and "wall" near some paneling) is treated exactly like a
+# confident one and shows up as a real detected region (reported: a "cabinet" region
+# was actually a blob straddling the TV and wall). Fix: replicate what post_process does
+# (bilinear-upsample logits to the image size, then argmax) but keep the softmax
+# probabilities too, and reject a connected component if its own mean confidence is
+# below min_confidence. Threshold is deliberately modest — ADE20K has 150 classes, so
+# even a correct prediction often isn't hugely confident, and being too strict here
+# would just recreate the earlier "detection catches too little" complaint.
+def semantic_regions(im, min_confidence=0.35):
     global _semantic_processor, _semantic_model
     if _semantic_model is None:
         from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
@@ -431,8 +441,12 @@ def semantic_regions(im):
     inputs = _semantic_processor(images=im, return_tensors="pt")
     with torch.inference_mode():
         output = _semantic_model(**inputs)
-    labels = _semantic_processor.post_process_semantic_segmentation(
-        output, target_sizes=[(im.height, im.width)])[0].cpu().numpy()
+    upsampled = torch.nn.functional.interpolate(
+        output.logits, size=(im.height, im.width), mode="bilinear", align_corners=False
+    )
+    confidence, labels = upsampled.softmax(dim=1)[0].max(dim=0)
+    labels = labels.cpu().numpy()
+    confidence = confidence.cpu().numpy()
     for cls in np.unique(labels):
         label = _semantic_model.config.id2label[int(cls)].split(";")[0]
         n, parts, stats, _ = cv2.connectedComponentsWithStats((labels == cls).astype("uint8"), 8)
@@ -440,8 +454,12 @@ def semantic_regions(im):
             # Old threshold (0.3% of image area) silently dropped small real
             # objects (a picture frame, a table lamp). Lowered to 0.12%; the
             # absolute 64px floor still filters out pure noise specks.
-            if stats[i, cv2.CC_STAT_AREA] >= max(64, im.width * im.height * 0.0012):
-                yield label, parts == i
+            if stats[i, cv2.CC_STAT_AREA] < max(64, im.width * im.height * 0.0012):
+                continue
+            component = parts == i
+            if confidence[component].mean() < min_confidence:
+                continue
+            yield label, component
 
 
 _semantic_processor = _semantic_model = None
