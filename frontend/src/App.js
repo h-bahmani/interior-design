@@ -132,14 +132,26 @@ function AppInner() {
   // now survive across edits (see invalidate above), a region picked before
   // an earlier edit would otherwise be rejected as "expired" on the next one —
   // sending its actual mask instead sidesteps that lookup entirely.
-  const requestSelection=()=>{
-    if(!selection?.region_id)return selection;
-    const region=regions.find(item=>item.id===selection.region_id);
-    return region?.mask ? {mask:region.mask} : selection;
+  const requestSelection=(sel=selection)=>{
+    if(!sel?.region_id)return sel;
+    const region=regions.find(item=>item.id===sel.region_id);
+    return region?.mask ? {mask:region.mask} : sel;
   };
-  const recolorObject=(color,strength)=>apply('/recolor-object',{selection:requestSelection(),color,strength},'recolor');
-  const applyTexture=(texture,opacity)=>apply('/apply-texture',{selection:requestSelection(),texture,opacity},'texture');
-  const generateTexture=texture=>apply('/generate-texture',{selection:requestSelection(),texture},'texture');
+  // Runs several operations back-to-back against one image, each one working on the
+  // previous step's output — used by Object Recolor to apply color+texture together and/or
+  // to repeat the same change across several selected areas in a single "Apply".
+  const applySteps=async(steps,label)=>{
+    if(!current || !steps?.length)return;
+    const data=await run('Applying your changes…',async request=>{
+      let img=current.image,last=null;
+      for(const step of steps){
+        last=await request(step.path,{image:img,model:genModel,selection:requestSelection(step.selection),...step.fields});
+        img=last.image;
+      }
+      return last;
+    },180000*Math.max(1,steps.length));
+    if(data)commit(data,label);
+  };
   const detect=async()=>{
     const data=await run('Finding objects and surfaces…',request=>request('/detect-objects',{image:current.image}));
     if(data){setRegions(data.regions || []);setSelection(null);if(!data.regions?.length)toast('No areas found. Try clicking an area or drawing a rectangle.','info');}
@@ -224,7 +236,7 @@ function AppInner() {
             onDetect={detect} onPoint={point} onEdit={(action,prompt)=>apply(action==='delete'?'/delete-object':'/edit-object',{selection:requestSelection(),prompt},action)}/>}
           {tool==='addobject' && <AddObjectFromPhoto image={current.image} selection={selection} onSelect={setSelection} busy={!!busy} onAdd={addObject}/>}
           {tool==='recolor' && <ObjectRecolor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
-            onDetect={detect} onPoint={point} onRecolor={recolorObject} onTexture={applyTexture} onGenerateTexture={generateTexture}/>}
+            onDetect={detect} onPoint={point} onApply={steps=>applySteps(steps,'recolor')}/>}
         </div>
         {current!==original && <fieldset className="result-fieldset" disabled={!!busy}>
           <ResultView original={original.image} key={version} generated={current.image} style={current.label} onReset={reset}

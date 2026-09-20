@@ -2,9 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { imageSource } from '../services/api';
 
 const EMPTY_REGIONS = [];
+const EMPTY_SELECTIONS = [];
+
+const selectionKey = s => s.region_id ? `r:${s.region_id}` : `b:${s.bbox.join(',')}`;
 
 // The image fills this canvas exactly: normalized coordinates exclude no hidden crop/padding.
-export default function RegionSelector({ image, regions = EMPTY_REGIONS, selection, onSelect, onPoint, busy, furnish = false }) {
+// multi=true switches from "one active selection" (selection/onSelect) to "a set of
+// selections applied together" (selections/onToggle/onClearAll) — used by tools that let
+// the same change be applied to several objects/surfaces at once.
+export default function RegionSelector({ image, regions = EMPTY_REGIONS, selection, onSelect, onPoint, busy, furnish = false,
+  multi = false, selections = EMPTY_SELECTIONS, onToggle, onClearAll }) {
   const canvas = useRef(null);
   const masks = useRef([]);
   const baseImage = useRef(null);
@@ -14,6 +21,7 @@ export default function RegionSelector({ image, regions = EMPTY_REGIONS, selecti
   const [draft, setDraft] = useState(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
+  const active = multi ? selections : (selection ? [selection] : EMPTY_SELECTIONS);
   useEffect(() => {
     let cancelled = false;
     setReady(false); setError(''); masks.current = [];
@@ -51,16 +59,17 @@ export default function RegionSelector({ image, regions = EMPTY_REGIONS, selecti
     ctx.strokeRect(x1*c.width,y1*c.height,(x2-x1)*c.width,(y2-y1)*c.height);
   };
   // Expensive: full-image redraw + a per-pixel mask overlay loop. Only reruns
-  // when the selected region changes, not on every pointer-move while dragging.
+  // when the active selection(s) change, not on every pointer-move while dragging.
   useEffect(()=>{
     const c=canvas.current;
     if(!ready || !c || !baseImage.current)return;
     const off=document.createElement('canvas');off.width=c.width;off.height=c.height;
     const octx=off.getContext('2d');octx.drawImage(baseImage.current,0,0,c.width,c.height);
-    const picked=masks.current.find(m=>m.region.id===selection?.region_id);
-    if(picked){
+    const ids=new Set(active.filter(s=>s.region_id).map(s=>s.region_id));
+    const picked=masks.current.filter(m=>ids.has(m.region.id));
+    if(picked.length){
       const overlay=octx.createImageData(c.width,c.height);
-      for(let i=0;i<picked.pixels.length;i++)if(picked.pixels[i]){
+      for(const m of picked)for(let i=0;i<m.pixels.length;i++)if(m.pixels[i]){
         overlay.data[i*4]=230;overlay.data[i*4+1]=184;overlay.data[i*4+2]=70;overlay.data[i*4+3]=115;
       }
       const layer=document.createElement('canvas');layer.width=c.width;layer.height=c.height;
@@ -68,23 +77,24 @@ export default function RegionSelector({ image, regions = EMPTY_REGIONS, selecti
     }
     composed.current=off;
     const ctx=c.getContext('2d');ctx.drawImage(off,0,0);
-    const selectedBox=draft || selection?.bbox;
-    if(selectedBox)drawBox(ctx,c,selectedBox);
-  },[ready,selection]);
+    for(const s of active)if(s.bbox)drawBox(ctx,c,s.bbox);
+    if(draft)drawBox(ctx,c,draft);
+  },[ready,selection,selections]);
   // Cheap: reuses the cached composed layer, just redraws the draft rectangle
   // on top — this is what runs on every pointer-move while dragging a box.
   useEffect(()=>{
     const c=canvas.current;
     if(!ready || !c || !composed.current)return;
     const ctx=c.getContext('2d');ctx.drawImage(composed.current,0,0);
-    const selectedBox=draft || selection?.bbox;
-    if(selectedBox)drawBox(ctx,c,selectedBox);
+    for(const s of active)if(s.bbox)drawBox(ctx,c,s.bbox);
+    if(draft)drawBox(ctx,c,draft);
   },[draft]);
   const point=e=>{
     const r=canvas.current.getBoundingClientRect();
     return [Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))];
   };
   const box=(a,b)=>[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])];
+  const pick=sel=>multi?onToggle(sel):onSelect(sel);
   const down=e=>{
     if(busy || !ready)return;
     const p=point(e);
@@ -96,29 +106,44 @@ export default function RegionSelector({ image, regions = EMPTY_REGIONS, selecti
       const hits=masks.current.filter(m=>m.pixels[index]===1).sort((a,b)=>{
         const area=r=>{const [x,y,x2,y2]=r.bbox;return(x2-x)*(y2-y);};return area(a.region)-area(b.region);
       });
-      if(hits.length)onSelect({region_id:hits[0].region.id});
+      if(hits.length)pick({region_id:hits[0].region.id});
     }
   };
   const up=e=>{
     if(!start.current)return;
     const b=box(start.current,point(e));start.current=null;setDraft(null);
-    if(b[2]-b[0]>.005 && b[3]-b[1]>.005)onSelect({bbox:b});
+    if(b[2]-b[0]>.005 && b[3]-b[1]>.005)pick({bbox:b});
     if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
   };
   return <div className="region-picker">
     <div className="tool-actions">
       {!furnish && <><button disabled={busy} aria-pressed={mode==='region'} onClick={()=>setMode('region')}>Select detected area</button>
-      <button disabled={busy} aria-pressed={mode==='point'} onClick={()=>setMode('point')}>Find area by clicking</button></>}
+      {!multi && <button disabled={busy} aria-pressed={mode==='point'} onClick={()=>setMode('point')}>Find area by clicking</button>}</>}
       <button disabled={busy} aria-pressed={mode==='box'} onClick={()=>setMode('box')}>Draw a rectangle</button>
-      <button disabled={busy || !selection} onClick={()=>onSelect(null)}>Clear selection</button>
+      {!multi && <button disabled={busy || !selection} onClick={()=>onSelect(null)}>Clear selection</button>}
     </div>
     <p>{mode==='box'?'Drag across the image to mark the area to change.':mode==='point'?'Click an area, then review the highlighted selection before applying.':'Click a detected area in the image or select it from the list.'}</p>
     <canvas ref={canvas} className="selection-canvas" aria-label="Room area selection" onPointerDown={down}
       onPointerMove={e=>{if(start.current)setDraft(box(start.current,point(e)));}} onPointerUp={up}
       onPointerCancel={()=>{start.current=null;setDraft(null);}} />
     {error && <p role="alert">{error}</p>}
-    {!furnish && <div className="region-list">{regions.map((r,i)=><button key={r.id} disabled={busy}
-      aria-pressed={selection?.region_id===r.id} onClick={()=>onSelect({region_id:r.id})}>{r.label} · {i+1}</button>)}</div>}
-    {selection?.bbox && <p>Rectangle selected.</p>}
+    {!furnish && <div className="region-list">{regions.map((r,i)=>{
+      const isActive = multi ? selections.some(s=>s.region_id===r.id) : selection?.region_id===r.id;
+      return <button key={r.id} disabled={busy} aria-pressed={isActive}
+        onClick={()=>pick({region_id:r.id})}>{r.label} · {i+1}</button>;
+    })}</div>}
+    {multi && <div className="selection-chips" aria-label="Selected areas">
+      {selections.length===0
+        ? <p className="field-hint">Pick several areas — click detected areas or draw rectangles — to change them all together.</p>
+        : <>{selections.map((s,i)=>{
+            const region=s.region_id ? regions.find(r=>r.id===s.region_id) : null;
+            const label=region ? region.label : `Rectangle ${i+1}`;
+            return <span className="chip" key={selectionKey(s)}>{label}
+              <button type="button" disabled={busy} aria-label={`Remove ${label}`} onClick={()=>onToggle(s)}>×</button>
+            </span>;
+          })}
+          <button type="button" className="chip-clear" disabled={busy} onClick={onClearAll}>Clear all</button></>}
+    </div>}
+    {!multi && selection?.bbox && <p>Rectangle selected.</p>}
   </div>;
 }

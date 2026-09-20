@@ -567,13 +567,19 @@ def generate_all_previews(image_b64, palette=None, styles=None, model="fast", se
 
 
 @spaces.GPU(duration=60)
+# Neutral prompt: works for both replacing an object ("replace this chair with
+# a wooden chair") and changing a surface's material ("make the ceiling
+# wooden") — the old suffix assumed every selection was a discrete object
+# needing a "contact shadow", which produced nonsense results on surfaces.
 def edit_object(image_b64, object_label=None, edit_prompt=None, selection=None, model="fast", seed=42):
     _, inpaint_pipe = get_pipes(model)
     im = base64_to_pil(image_b64)
     with MODEL_LOCK:
         mask = selection_mask(im, selection)
-        p = text_prompt(edit_prompt) + ", replace selected object only, complete object, realistic contact shadow, match room perspective, scale, lighting and surrounding style" + QUALITY_SUFFIX
-        neg = "duplicate object, old object, partial object, floating, deformed, blurry, seams, watermark" + QUALITY_NEGATIVE
+        p = (text_prompt(edit_prompt) +
+             ", blended naturally into the surrounding room, matching perspective, scale and existing lighting, photorealistic" + QUALITY_SUFFIX)
+        neg = (ARTIFACT_NEGATIVE_LEAD +
+               ", unrelated new object, extra furniture, mismatched style, warped lines, seams, bad edges" + QUALITY_NEGATIVE + TAIL_NEGATIVE)
         r = localized_inpaint(im, mask, p, seed, neg, 10, 5, inpaint_pipe)
     return {"image": pil_to_base64(r), "mime_type": "image/png"}
 

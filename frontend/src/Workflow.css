@@ -13,6 +13,12 @@
 .current-room{display:block;max-width:100%;max-height:460px;margin:22px auto;object-fit:contain;border-radius:12px}
 .selection-canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;border-radius:10px}
 .region-picker{max-width:950px;margin:0 auto}.region-list{max-height:220px;overflow:auto}
+.selection-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0}
+.chip{display:inline-flex;align-items:center;gap:6px;background:#242424;border:1px solid #655833;border-radius:20px;padding:6px 8px 6px 14px;color:#eee;font-size:14px}
+.chip button{background:none;border:none;color:#e6b846;font-size:16px;line-height:1;padding:0 4px;cursor:pointer}
+.chip-clear{background:none;border:1px solid #655833;border-radius:20px;padding:6px 14px;color:#bbb;cursor:pointer;font-size:13px}
+.toggle-check{display:flex;align-items:center;gap:8px;background:#242424;color:#eee;border:1px solid #655833;border-radius:8px;padding:10px 16px;cursor:pointer}
+.toggle-check input{width:16px;height:16px;accent-color:#e6b846}
 .preview-panel img{display:block;max-width:100%;max-height:400px;margin:16px 0}.preview-panel{margin-top:20px}
 .color-swatches{display:flex;margin:12px 0}.color-swatches span{width:28px;height:28px;display:inline-block}
 .custom-colors label{display:flex;flex-direction:column;gap:8px}.custom-colors input{width:75px;height:45px}
