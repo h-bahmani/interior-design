@@ -103,7 +103,7 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
 
     <p className="step-label">1. Select what to change</p>
     <button disabled={busy} onClick={onDetect}>{regions.length?'Detect areas again':'Detect objects and surfaces'}</button>
-    <div className="tool-actions" role="group" aria-label="Selection mode">
+    <div className="tool-actions selection-mode-row" role="group" aria-label="Selection mode">
       <button disabled={busy} aria-pressed={!multi} onClick={()=>setMultiMode(false)}>Single area</button>
       <button disabled={busy} aria-pressed={multi} onClick={()=>setMultiMode(true)}>Multiple areas at once</button>
     </div>
