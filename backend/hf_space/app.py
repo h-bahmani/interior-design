@@ -297,7 +297,7 @@ style_pipe_fast = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
     safety_checker=None, cache_dir=CACHE_DIR
 ).to("cuda")
 style_pipe_fast.scheduler = UniPCMultistepScheduler.from_config(style_pipe_fast.scheduler.config)
-style_pipe_fast.load_ip_adapter("h94/IP-Adapter", subfolder="models", weight_name="ip-adapter_sd15.bin")
+style_pipe_fast.load_ip_adapter("h94/IP-Adapter", subfolder="models", weight_name="ip-adapter-plus_sd15.bin")  # Plus: better reference fidelity than the base variant
 style_pipe_fast.set_ip_adapter_scale(0.0)
 
 inpaint_pipe_fast = StableDiffusionInpaintPipeline.from_pretrained(
@@ -319,7 +319,7 @@ style_pipe_quality = StableDiffusionXLControlNetImg2ImgPipeline.from_pretrained(
     variant="fp16", use_safetensors=True,
 ).to("cuda")
 style_pipe_quality.scheduler = UniPCMultistepScheduler.from_config(style_pipe_quality.scheduler.config)
-style_pipe_quality.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter_sdxl.bin")
+style_pipe_quality.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models", weight_name="ip-adapter-plus_sdxl_vit-h.safetensors")  # Plus: better reference fidelity
 style_pipe_quality.set_ip_adapter_scale(0.0)
 
 inpaint_pipe_quality = AutoPipelineForInpainting.from_pretrained(
@@ -670,6 +670,38 @@ def apply_texture(image_b64, selection, texture_b64, opacity=.85):
     return {"image": pil_to_base64(Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))), "mime_type": "image/png"}
 
 
+# apply_texture (above) is for when the user has their own texture photo.
+# This is the opposite: no upload needed, just pick "stone" or "velvet" and
+# the model generates it — uses localized_inpaint (same as furnish_room)
+# with a pre-written prompt instead of apply_texture's pure-OpenCV tiling.
+TEXTURE_PROMPTS = {
+    "natural_stone": "natural stone cladding, cool grey and beige veined marble texture, polished stone surface, subtle natural veining pattern",
+    "wood_paneling": "warm wood paneling, vertical oak wood slats, natural wood grain texture, honey brown tone",
+    "velvet_fabric": "plush velvet fabric texture, soft deep emerald green velvet, rich fabric weave, luxurious upholstery texture",
+    "exposed_brick": "exposed red brick wall, weathered brick texture, visible mortar lines, warm terracotta brick tones",
+    "exposed_concrete": "raw exposed concrete surface, smooth grey concrete texture, subtle form-tie marks, industrial finish",
+    "geometric_wallpaper": "geometric wallpaper pattern, repeating art deco gold and cream geometric print, elegant wall covering",
+    "ceramic_tile": "glossy ceramic subway tile, clean white tile texture, thin grey grout lines, reflective glaze",
+    "rattan_wicker": "natural rattan wicker weave texture, woven cane pattern, warm tan natural fiber texture",
+}
+
+
+@spaces.GPU(duration=60)
+def generate_texture(image_b64, selection, texture_name, model="fast", seed=42):
+    _, inpaint_pipe = get_pipes(model)
+    if texture_name not in TEXTURE_PROMPTS:
+        raise ValueError(f"texture must be one of {list(TEXTURE_PROMPTS)}")
+    im = base64_to_pil(image_b64)
+    with MODEL_LOCK:
+        mask = selection_mask(im, selection)
+        p = (TEXTURE_PROMPTS[texture_name] +
+             ", seamless repeating texture, realistic material, matching existing lighting and shadows" + QUALITY_SUFFIX)
+        neg = (ARTIFACT_NEGATIVE_LEAD + ", changed room style, changed furniture, different material" +
+               QUALITY_NEGATIVE + TAIL_NEGATIVE)
+        r = localized_inpaint(im, mask, p, seed, neg, 6, 6, inpaint_pipe)
+    return {"image": pil_to_base64(r), "mime_type": "image/png"}
+
+
 def resolve_selection(image_b64, data):
     selection = data.get("selection")
     if selection:
@@ -854,7 +886,8 @@ def capabilities():
     return {
         "api_version": 2, "styles": list(STYLE_PROMPTS), "models": ["fast", "quality"],
         "current_model": None,
-        "operations": ["style", "furnish", "detect", "edit", "delete", "add-object", "recolor", "texture"],
+        "operations": ["style", "furnish", "detect", "edit", "delete", "add-object", "recolor", "texture", "generate-texture"],
+        "textures": list(TEXTURE_PROMPTS),
         "selection": ["region_id", "mask", "bbox", "point", "points"],
         "coordinates": "normalized", "furnish_requires_selection": False,
         "output_mime_type": "image/png",
@@ -964,6 +997,19 @@ async def apply_texture_route(request: Request):
         selection = resolve_selection(image_b64, data)
         return finish(apply_texture(image_b64, selection, pil_to_base64(base64_to_pil(texture)),
                                      data.get("opacity", .85)))
+
+
+@api.post("/generate-texture")
+async def generate_texture_route(request: Request):
+    data = await request.json()
+    texture_name = data.get("texture")
+    if not texture_name:
+        raise ValueError("texture name required")
+    with MODEL_LOCK:
+        image_b64 = request_image(data)
+        selection = resolve_selection(image_b64, data)
+        return finish(generate_texture(image_b64, selection, texture_name,
+                                        request_model(data), request_seed(data)))
 
 
 @api.post("/furnish-room")
