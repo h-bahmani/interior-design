@@ -35,16 +35,24 @@ function AppInner() {
   const [genModel,setGenModel]=useState(()=>localStorage.getItem('interiorai_gen_model')||'fast');
   const changeModel=m=>{setGenModel(m);localStorage.setItem('interiorai_gen_model',m);};
   const lock=useRef(false), revision=useRef(0), pending=useRef(null), activeUrl=useRef(apiUrl), download=useRef(null), toolPanel=useRef(null);
+  const regionsSize=useRef(null);
   // clearRegions=false for in-place edits (commit/undo/restore/history) — keeps
   // the detected region list valid across a chain of edits so you don't have to
   // re-run detection after every single change, and also keeps the current
-  // selection and each tool's own form state (typed prompt, chosen style/
-  // materials/colors) so a generation doesn't wipe out what produced it.
-  // clearRegions=true is reserved for an actual fresh start (new photo, new
-  // login, backend URL change) — that's the only case worth resetting for.
-  const invalidate=useCallback((clearRegions=true)=>{
+  // selection so a generation doesn't wipe out what produced it.
+  //
+  // freshStart is a SEPARATE concern from clearRegions: it remounts the tool
+  // panel (bumping `session`), which wipes each tool's own local state -- typed
+  // prompt, chosen mode, etc. That's only appropriate for an actual fresh start
+  // (new photo, new login, backend URL change), never for "the regions/mask
+  // are now stale" (a style change, restore original) -- those still need
+  // clearRegions=true, but conflating that with a full panel remount used to
+  // silently erase whatever the user had just typed right after every single
+  // style generation, which is a much bigger loss than re-selecting a region.
+  const invalidate=useCallback((clearRegions=true, freshStart=clearRegions)=>{
     revision.current+=1; setVersion(revision.current);
-    if(clearRegions){setRegions([]);setSelection(null);setSession(s=>s+1);}
+    if(clearRegions){setRegions([]);setSelection(null);regionsSize.current=null;}
+    if(freshStart)setSession(s=>s+1);
   },[]);
   const changeUrl=useCallback((url)=>{
     const clean=url.trim().replace(/\/+$/,'');
@@ -107,11 +115,13 @@ function AppInner() {
   // there now (reported: "changed the table's material, the table got wiped out").
   // Targeted edits (recolor, texture, edit/delete one object, furnish, add object)
   // don't redraw the room, so their masks stay valid and regions keep persisting.
+  // freshStart is always false here -- a style change needs clearRegions, not a full
+  // tool-panel remount (see invalidate's own comment for why those are now separate).
   const commit=(data,label,clearRegions=false)=>{
-    const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label};
+    const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label,width:data.width,height:data.height};
     setBefore(current);setCurrent(next);
     setHistory(h=>[{...next,id:Date.now()+Math.random()},...h].slice(0,8));
-    invalidate(clearRegions);
+    invalidate(clearRegions,false);
     if(data.warning)toast(data.warning,'info',7000);
     else if(clearRegions)toast('Style changed — re-run "Detect objects" before editing a specific object again.','info',6000);
     else toast('Changes applied.','success');
@@ -123,7 +133,7 @@ function AppInner() {
     try{sized=await downscaleImage(file);}
     catch{toast('Could not read this image file.','error');return;}
     const data=await run('Uploading room…',request=>{const form=new FormData();form.append('image',sized);return request('/upload',form);});
-    if(data){const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label:'original'};
+    if(data){const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label:'original',width:data.width,height:data.height};
       setCurrent(next);setOriginal(next);setBefore(null);setHistory([]);invalidate();}
   };
   // Only customPrompt/prompt go through enhancePrompt() -- extraDetails pairs with a
@@ -152,9 +162,11 @@ function AppInner() {
   };
   const addObject=async(objectImage,prompt)=>{
     if(!current)return;
+    const sel=requestSelection();
+    if(sel===undefined)return; // requestSelection already toasted why
     setEnhancedPrompt(null);
     const translatedPrompt=await enhanceAndToast(await translateToEnglish(prompt));
-    const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt:translatedPrompt,selection:requestSelection(),model:genModel}));
+    const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt:translatedPrompt,selection:sel,model:genModel}));
     if(data)commit(data,'add_object');
   };
   // A region_id is only valid against the image it was detected on (the
@@ -162,8 +174,23 @@ function AppInner() {
   // now survive across edits (see invalidate above), a region picked before
   // an earlier edit would otherwise be rejected as "expired" on the next one —
   // sending its actual mask instead sidesteps that lookup entirely.
+  //
+  // But a cached mask is only meaningful against an image of the SAME size it
+  // was cut from (reported: an edit against a leftover selection failed with a
+  // raw backend "mask dimensions must match image" error). Every backend result
+  // already reports its width/height, and detect()/point() record the size
+  // regions were found against -- if the two ever disagree, the mask is
+  // definitely stale, so this clears it and tells the user to re-detect instead
+  // of sending a request that can only fail. Returns undefined (not null) to
+  // distinguish "this selection is stale, abort" from "no selection was made,
+  // which for furnish just means the default full-room area."
   const requestSelection=(sel=selection)=>{
     if(!sel?.region_id)return sel;
+    if(regionsSize.current && current && (current.width!==regionsSize.current.width || current.height!==regionsSize.current.height)){
+      setRegions([]);setSelection(null);regionsSize.current=null;
+      toast('Detected areas no longer match the current image — click "Detect objects again" first.','error',7000);
+      return undefined;
+    }
     const region=regions.find(item=>item.id===sel.region_id);
     return region?.mask ? {mask:region.mask} : sel;
   };
@@ -172,10 +199,12 @@ function AppInner() {
   // to repeat the same change across several selected areas in a single "Apply".
   const applySteps=async(steps,label)=>{
     if(!current || !steps?.length)return;
+    const resolved=steps.map(step=>({...step,selection:requestSelection(step.selection)}));
+    if(resolved.some(s=>s.selection===undefined))return; // requestSelection already toasted why
     const data=await run('Applying your changes…',async request=>{
       let img=current.image,last=null;
-      for(const step of steps){
-        last=await request(step.path,{image:img,model:genModel,selection:requestSelection(step.selection),...step.fields});
+      for(const step of resolved){
+        last=await request(step.path,{image:img,model:genModel,selection:step.selection,...step.fields});
         img=last.image;
       }
       return last;
@@ -184,11 +213,19 @@ function AppInner() {
   };
   const detect=async()=>{
     const data=await run('Finding objects and surfaces…',request=>request('/detect-objects',{image:current.image}));
-    if(data){setRegions(data.regions || []);setSelection(null);if(!data.regions?.length)toast('No areas found. Try clicking an area or drawing a rectangle.','info');}
+    if(data){
+      setRegions(data.regions || []);setSelection(null);
+      regionsSize.current=data.regions?.length ? {width:data.width,height:data.height} : null;
+      if(!data.regions?.length)toast('No areas found. Try clicking an area or drawing a rectangle.','info');
+    }
   };
   const point=async coordinates=>{
     const data=await run('Finding the selected area…',request=>request('/segment-point',{image:current.image,point:coordinates}));
-    if(data){setRegions(r=>[...r,{id:data.region_id,label:'Selected area',mask:data.mask,bbox:[0,0,1,1]}]);setSelection({region_id:data.region_id});}
+    if(data){
+      setRegions(r=>[...r,{id:data.region_id,label:'Selected area',mask:data.mask,bbox:[0,0,1,1]}]);
+      setSelection({region_id:data.region_id});
+      regionsSize.current={width:data.width,height:data.height};
+    }
   };
   const undo=()=>{if(!before || lock.current)return;setCurrent(before);setBefore(null);invalidate(false);};
   const reset=()=>{if(lock.current)return;download.current=null;setCurrent(null);setOriginal(null);setBefore(null);setHistory([]);invalidate();};
@@ -259,7 +296,7 @@ function AppInner() {
         <div className="page-header"><h1>Your Room Workspace</h1><p>Every tool uses the current image. Undo restores the previous result.</p></div>
         <div className="tool-actions"><button disabled={!!busy} onClick={reset}>Upload another photo</button>
           <button disabled={!!busy || !before} onClick={undo}>Undo last change</button>
-          <button disabled={!!busy || current===original} onClick={()=>{setBefore(current);setCurrent(original);invalidate();}}>Restore original</button></div>
+          <button disabled={!!busy || current===original} onClick={()=>{setBefore(current);setCurrent(original);invalidate(true,false);}}>Restore original</button></div>
         {/* Switching tools used to always clear the selection, even though `regions`
             itself survives the switch -- so picking an object in Object Editing, then
             deciding to recolor that SAME object instead, silently lost the pick and
@@ -285,9 +322,9 @@ function AppInner() {
                 return run('Sketching quick previews…',request=>request('/preview-styles',{image:current.image,styles:styleIds,palette:p,model:genModel,draft:true}),timeoutMs);
               }}/></>}
           {tool==='furnish' && <FurnishRoom image={current.image} busy={!!busy} selection={selection} onSelect={setSelection}
-            onFurnish={prompt=>apply('/furnish-room',{prompt,selection:requestSelection()},'furnish')}/>}
+            onFurnish={prompt=>{const sel=requestSelection();if(sel!==undefined)apply('/furnish-room',{prompt,selection:sel},'furnish');}}/>}
           {tool==='object' && <ObjectEditor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
-            onDetect={detect} onPoint={point} onEdit={(action,prompt)=>apply(action==='delete'?'/delete-object':'/edit-object',{selection:requestSelection(),prompt},action)}/>}
+            onDetect={detect} onPoint={point} onEdit={(action,prompt)=>{const sel=requestSelection();if(sel!==undefined)apply(action==='delete'?'/delete-object':'/edit-object',{selection:sel,prompt},action);}}/>}
           {tool==='addobject' && <AddObjectFromPhoto image={current.image} selection={selection} onSelect={setSelection} busy={!!busy} onAdd={addObject}/>}
           {tool==='recolor' && <ObjectRecolor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
             onDetect={detect} onPoint={point} onApply={steps=>applySteps(steps,'recolor')}/>}
