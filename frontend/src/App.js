@@ -117,8 +117,16 @@ function AppInner() {
   // don't redraw the room, so their masks stay valid and regions keep persisting.
   // freshStart is always false here -- a style change needs clearRegions, not a full
   // tool-panel remount (see invalidate's own comment for why those are now separate).
+  // "Use this preview" commits a bare {image} with no width/height (/preview-styles'
+  // own response never carried them) -- that left `current.width` permanently
+  // undefined, which made requestSelection()'s stale-mask guard below misfire on
+  // every single later action, forever, since undefined!==<any real number> (reported:
+  // "re-detected, still blocked, every time"). A style preview's output is resized to
+  // the original image's exact dimensions same as any other generation, so falling
+  // back to the outgoing current's width/height here is exact, not a guess.
   const commit=(data,label,clearRegions=false)=>{
-    const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label,width:data.width,height:data.height};
+    const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label,
+      width:data.width??current?.width,height:data.height??current?.height};
     setBefore(current);setCurrent(next);
     setHistory(h=>[{...next,id:Date.now()+Math.random()},...h].slice(0,8));
     invalidate(clearRegions,false);
@@ -184,9 +192,17 @@ function AppInner() {
   // of sending a request that can only fail. Returns undefined (not null) to
   // distinguish "this selection is stale, abort" from "no selection was made,
   // which for furnish just means the default full-room area."
+  //
+  // Only compares when both sizes are actually known numbers -- an unknown size
+  // must never read as "mismatched," since that fails closed and blocks the
+  // operation forever with no way to recover (this exact bug already happened
+  // once: a commit path that didn't report width/height made current.width
+  // permanently undefined, so undefined!==<real number> misfired on every
+  // later action even after re-detecting).
   const requestSelection=(sel=selection)=>{
     if(!sel?.region_id)return sel;
-    if(regionsSize.current && current && (current.width!==regionsSize.current.width || current.height!==regionsSize.current.height)){
+    if(regionsSize.current && current && typeof current.width==='number' && typeof current.height==='number' &&
+      (current.width!==regionsSize.current.width || current.height!==regionsSize.current.height)){
       setRegions([]);setSelection(null);regionsSize.current=null;
       toast('Detected areas no longer match the current image — click "Detect objects again" first.','error',7000);
       return undefined;
