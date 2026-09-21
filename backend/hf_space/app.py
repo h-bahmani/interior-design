@@ -393,13 +393,11 @@ def get_lama_model():
     return _lama_model
 
 
-# Loading it here (once, at startup) instead of lazily on the first delete request --
-# downloading the LaMa checkpoint plus first load can take longer than the reverse
-# proxy in front of this app is willing to wait, which surfaced as a 504 Gateway
-# Timeout on someone's very first "delete object" click.
-print("Loading LaMa (object removal)...")
-get_lama_model()
-print("LaMa loaded")
+# Deliberately lazy (not loaded at startup): an earlier version loaded this eagerly to
+# avoid a 504 on the first delete request, but loading everything at once at startup
+# (YOLO+SAM+SegFormer+both style/inpaint pipelines+LaMa) pushed system RAM over the
+# ceiling in that one moment and OOM-killed the whole kernel on a memory-constrained
+# host (reported on Kaggle) -- far worse than a retryable 504.
 
 
 # ============================================================
