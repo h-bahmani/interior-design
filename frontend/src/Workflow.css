@@ -3,7 +3,7 @@
 .app button{font:inherit;cursor:pointer}.app button:disabled{opacity:.45;cursor:not-allowed}
 .tool-panel{border:1px solid #655833;border-radius:16px;background:#161616;padding:24px;margin:24px 0;color:#eee}
 .tool-panel p{color:#bbb;line-height:1.7;margin:12px 0}.tool-panel h2{margin-bottom:14px}
-.tool-panel button,.tool-actions button,.operation-tabs button,.user-info button{background:#242424;color:#eee;border:1px solid #655833;border-radius:8px;padding:10px 16px}
+.tool-panel button,.tool-actions button,.operation-tabs button{background:#242424;color:#eee;border:1px solid #655833;border-radius:8px;padding:10px 16px}
 .app button[aria-pressed=true],.tool-panel button.selected{border-color:#e6b846;background:#463b20;color:#ffe6a0}
 .tool-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:12px;margin:20px 0}
 .tool-grid button{text-align:left}.tool-grid small,.tool-grid strong{display:block;margin:7px 0}
@@ -41,7 +41,7 @@
 .status-text span{display:block;margin-top:8px;opacity:.65;font-size:13px}
 .result-fieldset{border:0;padding:0;margin-top:35px;min-width:0}.history-image{width:100%;height:140px;object-fit:contain}
 .app button:focus-visible,.app textarea:focus-visible{outline:3px solid #e6b846;outline-offset:3px}
-.header .logo{background:none;border:0;color:inherit}.user-info{flex-wrap:wrap;gap:10px}
+.header .logo{background:none;border:0;color:inherit}
 .model-toggle{display:flex;gap:2px;background:#1a1710;border:1px solid #655833;border-radius:8px;padding:3px}
 .model-toggle button{padding:7px 14px;font-size:12px;border:0;border-radius:6px;background:transparent}
 .reference-preview{max-width:220px;max-height:220px;border-radius:10px;display:block;margin:0 auto}
