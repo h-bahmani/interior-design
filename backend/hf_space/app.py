@@ -555,9 +555,24 @@ def detect_objects(image_b64):
             for box in result.boxes:
                 masks, scores, _ = sam_predictor.predict(box=box.xyxy[0].cpu().numpy(), multimask_output=True)
                 add(yolo_model.names[int(box.cls.item())], masks[int(np.argmax(scores))], "yolo_sam", float(box.conf.item()))
+        # A small object sitting ON or IN FRONT OF a broad surface (a vase on a dresser
+        # top, a lamp on a console) is still inside that surface's SegFormer mask --
+        # SegFormer classifies the whole cabinet/countertop as one blob with no idea
+        # what's resting on it. Editing the surface then bled onto the object too
+        # (reported: recoloring a dresser top also repainted the vase standing on it).
+        # YOLO+SAM already found these compact objects individually and more precisely,
+        # so carve all of them out of every SegFormer surface mask before it's offered
+        # as its own selectable region -- same idea as the mirror exclusion inside
+        # semantic_regions() itself, one level up.
+        object_mask = np.zeros((im.height, im.width), bool)
+        for item in items.values():
+            object_mask |= item["mask"]
         for label, mask in semantic_regions(im):
             if any(label == item["label"] and (mask & item["mask"]).sum() / max(1, (mask | item["mask"]).sum()) > 0.65
                    for item in items.values()):
+                continue
+            mask = mask & ~object_mask
+            if not mask.any():
                 continue
             add(label, mask, "segformer")
         REGION_STORE[key] = items
