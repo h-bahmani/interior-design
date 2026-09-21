@@ -452,18 +452,35 @@ def semantic_regions(im, min_confidence=0.35):
     confidence, labels = upsampled.softmax(dim=1)[0].max(dim=0)
     labels = labels.cpu().numpy()
     confidence = confidence.cpu().numpy()
+    # Old threshold (0.3% of image area) silently dropped small real objects (a picture
+    # frame, a table lamp). Lowered to 0.12%; the absolute 64px floor still filters out
+    # pure noise specks.
+    min_area = max(64, im.width * im.height * 0.0012)
+
+    # A mirror shows a reflection of the room, so nearby surfaces (wall, curtain) often
+    # get misclassified *inside* the mirror as whatever it's reflecting -- reported: a
+    # texture edit bled into the mirror and onto a chrome fixture next to it. Detect
+    # "mirror" first and carve it out of every other class's mask so an edit never lands
+    # inside a reflection; the mirror itself is still detected and selectable normally.
+    mirror_mask = np.zeros(labels.shape, dtype=bool)
+    for cls in np.unique(labels):
+        if _semantic_model.config.id2label[int(cls)].split(";")[0].lower() == "mirror":
+            mirror_mask |= labels == cls
+
     for cls in np.unique(labels):
         label = _semantic_model.config.id2label[int(cls)].split(";")[0]
+        is_mirror = label.lower() == "mirror"
         n, parts, stats, _ = cv2.connectedComponentsWithStats((labels == cls).astype("uint8"), 8)
         for i in range(1, n):
-            # Old threshold (0.3% of image area) silently dropped small real
-            # objects (a picture frame, a table lamp). Lowered to 0.12%; the
-            # absolute 64px floor still filters out pure noise specks.
-            if stats[i, cv2.CC_STAT_AREA] < max(64, im.width * im.height * 0.0012):
+            if stats[i, cv2.CC_STAT_AREA] < min_area:
                 continue
             component = parts == i
             if confidence[component].mean() < min_confidence:
                 continue
+            if not is_mirror:
+                component = component & ~mirror_mask
+                if component.sum() < min_area:
+                    continue
             yield label, component
 
 

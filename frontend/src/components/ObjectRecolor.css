@@ -1,7 +1,11 @@
 .object-recolor .recolor-presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:10px;margin:20px 0}
 .object-recolor .recolor-presets button{display:flex;align-items:center;gap:10px;padding:10px;text-align:left}
 .object-recolor .recolor-presets span{width:30px;height:30px;border:1px solid rgba(255,255,255,.28);border-radius:50%;flex:0 0 auto}
-.object-recolor .recolor-presets small{font-size:.8rem;line-height:1.3}
+/* Flex items don't shrink below their content's intrinsic width by default, so a single
+   long unbreakable word (e.g. "Terracotta") pushed the text past the button's own right
+   edge instead of wrapping. min-width:0 lets it shrink to the column; break-word lets a
+   word that's still too wide break mid-word rather than overflow. */
+.object-recolor .recolor-presets small{font-size:.8rem;line-height:1.3;min-width:0;overflow-wrap:break-word;word-break:break-word}
 /* Texture/material names ("Geometric Wallpaper", "Exposed Concrete"...) run longer than
    color names, so these cards need more room than the base 105px or the text overflows. */
 .object-recolor .texture-presets{grid-template-columns:repeat(auto-fill,minmax(155px,1fr))}
