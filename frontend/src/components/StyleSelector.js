@@ -19,6 +19,10 @@ const STYLES = [
   { id: "dark_academia", name: "Dark Academia", desc: "Walnut library, leather, brass lamps", emoji: "❧", color: "#4a3a2a" },
   { id: "tropical_modern", name: "Tropical Modern", desc: "Rattan, palms, breezy Bali resort", emoji: "❁", color: "#7a9b6a" },
   { id: "brutalist", name: "Brutalist", desc: "Raw concrete, monolithic minimalism", emoji: "▦", color: "#6a6a6a" },
+  { id: "mediterranean", name: "Mediterranean", desc: "Whitewashed stucco, azulejo tile, wrought iron", emoji: "⛲", color: "#6b9bb3" },
+  { id: "shabby_chic", name: "Shabby Chic", desc: "Distressed white furniture, vintage florals", emoji: "❦", color: "#e8c4d4" },
+  { id: "southwestern_desert", name: "Southwestern Desert", desc: "Adobe clay, Navajo textiles, turquoise", emoji: "☀", color: "#c1703f" },
+  { id: "memphis_postmodern", name: "Memphis Postmodern", desc: "Bold color blocks, playful 80s geometry", emoji: "◫", color: "#2ec4b6" },
 ];
 
 const MODES = [

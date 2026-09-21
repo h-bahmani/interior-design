@@ -4,7 +4,6 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import Auth from './components/Auth';
 import BackendSetup from './components/BackendSetup';
-import PromptEnhancerSetup from './components/PromptEnhancerSetup';
 import Upload from './components/Upload';
 import StyleSelector from './components/StyleSelector';
 import FurnishRoom from './components/FurnishRoom';
@@ -26,7 +25,6 @@ function AppInner() {
   const toast=useToast();
   const [user,setUser]=useState(null), [authChecked,setAuthChecked]=useState(false);
   const [apiUrl,setApiUrl]=useState(getApiUrl), [setup,setSetup]=useState(false), [connection,setConnection]=useState('checking');
-  const [showEnhancer,setShowEnhancer]=useState(false);
   const [current,setCurrent]=useState(null), [original,setOriginal]=useState(null), [before,setBefore]=useState(null);
   const [history,setHistory]=useState([]), [showHistory,setShowHistory]=useState(false), [showMenu,setShowMenu]=useState(false);
   const menuRef=useRef(null);
@@ -121,16 +119,16 @@ function AppInner() {
   const apply=async(path,fields,label)=>{
     if(!current)return;
     const translated={...fields};
-    if(translated.customPrompt)translated.customPrompt=await enhancePrompt(await translateToEnglish(translated.customPrompt));
-    if(translated.prompt)translated.prompt=await enhancePrompt(await translateToEnglish(translated.prompt));
-    if(translated.extraDetails)translated.extraDetails=await enhancePrompt(await translateToEnglish(translated.extraDetails));
+    if(translated.customPrompt)translated.customPrompt=await enhancePrompt(activeUrl.current,await translateToEnglish(translated.customPrompt));
+    if(translated.prompt)translated.prompt=await enhancePrompt(activeUrl.current,await translateToEnglish(translated.prompt));
+    if(translated.extraDetails)translated.extraDetails=await enhancePrompt(activeUrl.current,await translateToEnglish(translated.extraDetails));
     if(translated.palette?.prompt)translated.palette={...translated.palette,prompt:await translateToEnglish(translated.palette.prompt)};
     const data=await run('Applying your changes…',request=>request(path,{image:current.image,model:genModel,...translated}));
     if(data)commit(data,label);
   };
   const addObject=async(objectImage,prompt)=>{
     if(!current)return;
-    const translatedPrompt=await enhancePrompt(await translateToEnglish(prompt));
+    const translatedPrompt=await enhancePrompt(activeUrl.current,await translateToEnglish(prompt));
     const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt:translatedPrompt,selection:requestSelection(),model:genModel}));
     if(data)commit(data,'add_object');
   };
@@ -193,7 +191,6 @@ function AppInner() {
   if(!user)return <Auth onLogin={()=>{}} />;
   return <div className="app">
     {setup && <BackendSetup onConnect={url=>{changeUrl(url);setSetup(false);}} />}
-    {showEnhancer && <PromptEnhancerSetup onClose={()=>setShowEnhancer(false)} />}
     <div className="ambient-bg" aria-hidden="true"><div className="orb orb-1"/><div className="orb orb-2"/></div>
     <header className="header"><div className="header-inner">
       <button className="logo" disabled={!!busy} onClick={reset}><span className="logo-text">Interior<em>AI</em></span></button>
@@ -210,7 +207,6 @@ function AppInner() {
           <span className="header-dropdown-user">{user.displayName || user.email}</span>
           <button role="menuitem" disabled={!!busy} onClick={()=>{setSetup(true);setShowMenu(false);}}>Connection: {connection}</button>
           <button role="menuitem" disabled={!!busy || !history.length} onClick={()=>{setShowHistory(v=>!v);setShowMenu(false);}}>History ({history.length})</button>
-          <button role="menuitem" disabled={!!busy} onClick={()=>{setShowEnhancer(true);setShowMenu(false);}}>AI Prompt Enhancer</button>
           <button role="menuitem" disabled={!!busy} onClick={()=>signOut(auth)}>Sign Out</button>
         </div>}
       </div>

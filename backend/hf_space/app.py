@@ -71,6 +71,11 @@ if not CONNECTION_KEY:
         "Settings -> Variables and secrets before it will accept requests."
     )
 
+# Optional AI prompt enhancement (OpenRouter) -- same Repository Secret mechanism as
+# CONNECTION_KEY above, never in this file. Left unset, enhance_prompt() below is a no-op.
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "inclusionai/ling-3.0-flash-vl:free")
+
 # ============================================================
 # Image / selection helpers — unchanged from the notebook (cell "helper
 # functions", section 6)
@@ -398,6 +403,10 @@ STYLE_PROMPTS = {
     "dark_academia": {"prompt": "dark academia interior design, floor to ceiling dark walnut bookshelves with leather bound books, deep forest green velvet wingback armchair, brass library lamp with green glass shade, oxblood leather chesterfield sofa, herringbone dark wood floor", "negative": "bright white, minimalist, neon, plastic, modern sleek, sparse, empty shelves"},
     "tropical_modern": {"prompt": "tropical modern interior design, natural rattan and woven wicker furniture, abundant monstera and palm plants, warm teak wood accents, open airy layout with louvered shutters, terracotta and cream palette, woven bamboo pendant light", "negative": "cold, sterile, heavy dark wood, no plants, industrial, gothic, cramped"},
     "brutalist": {"prompt": "brutalist interior design, raw exposed poured concrete walls and ceiling, monolithic geometric furniture forms, single sculptural black leather chair, minimal charcoal grey palette, exposed structural beams, stark dramatic shadows", "negative": "ornate, colorful, cluttered, cozy textiles, floral, pastel, cheap plastic"},
+    "mediterranean": {"prompt": "Mediterranean coastal interior design, whitewashed stucco walls, blue and white azulejo tile accents, wrought iron light fixtures, terracotta floor tiles, olive green potted plants, arched doorways", "negative": "cold, minimalist, industrial, neon, dark, plastic, sterile"},
+    "shabby_chic": {"prompt": "shabby chic interior design, distressed white painted furniture, soft pastel floral upholstery, vintage crystal chandelier, weathered wood accents, lace and linen textiles, romantic vintage charm", "negative": "modern sleek, industrial, dark colors, minimalist, glossy plastic, bold geometric"},
+    "southwestern_desert": {"prompt": "southwestern desert interior design, warm adobe clay walls, Navajo pattern woven textiles, turquoise accent pillows, leather furniture, cacti in terracotta pots, natural wood beams", "negative": "cold, pastel, industrial, glossy, minimalist white, nautical"},
+    "memphis_postmodern": {"prompt": "Memphis postmodern interior design, bold primary color blocks, squiggle and geometric patterns, playful asymmetric furniture shapes, terrazzo flooring, chrome and neon accents", "negative": "muted, traditional, rustic, minimalist, dark academia, farmhouse"},
 }
 
 ROOM_PRESERVE_LEAD = "keep the same room type, walls, windows, doors and furniture layout"
@@ -894,6 +903,39 @@ def finish(result):
     return result
 
 
+_ENHANCE_SYSTEM_PROMPT = (
+    "You expand short interior-design prompts into vivid, concrete visual detail "
+    "(materials, colors, lighting, furniture style) for an AI image generator. Keep the "
+    "same scope and intent exactly -- never add a new room, structural changes, or objects "
+    "the user didn't ask for. Reply with ONLY the rewritten prompt: one paragraph, no "
+    "preamble, no quotes."
+)
+
+
+def enhance_prompt(text):
+    if not OPENROUTER_API_KEY or not isinstance(text, str) or not text.strip():
+        return text
+    try:
+        r = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
+            json={
+                "model": OPENROUTER_MODEL,
+                "messages": [
+                    {"role": "system", "content": _ENHANCE_SYSTEM_PROMPT},
+                    {"role": "user", "content": text},
+                ],
+                "max_tokens": 220,
+            },
+            timeout=12,
+        )
+        r.raise_for_status()
+        out = r.json()["choices"][0]["message"]["content"].strip()
+        return out or text
+    except Exception:
+        return text
+
+
 @api.get("/health")
 def health():
     return {"status": "ok", "colab_connected": True, "mode": "zerogpu", "api_version": 2, "current_model": None}
@@ -909,7 +951,14 @@ def capabilities():
         "selection": ["region_id", "mask", "bbox", "point", "points"],
         "coordinates": "normalized", "furnish_requires_selection": False,
         "output_mime_type": "image/png",
+        "prompt_enhance": bool(OPENROUTER_API_KEY),
     }
+
+
+@api.post("/enhance-prompt")
+async def enhance_prompt_route(request: Request):
+    data = await request.json()
+    return {"prompt": enhance_prompt(data.get("prompt", ""))}
 
 
 @api.post("/upload")
