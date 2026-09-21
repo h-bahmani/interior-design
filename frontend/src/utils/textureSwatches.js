@@ -20,14 +20,15 @@ const PAINTERS = {
   natural_stone(ctx, w, h) {
     ctx.fillStyle = '#cfcac2'; ctx.fillRect(0, 0, w, h);
     const rnd = rng(1);
-    for (let i = 0; i < 14; i++) {
-      ctx.strokeStyle = `rgba(${140 + rnd() * 40},${135 + rnd() * 40},${125 + rnd() * 35},${0.25 + rnd() * 0.3})`;
-      ctx.lineWidth = 0.6 + rnd() * 1.2;
-      ctx.beginPath();
-      let x = rnd() * w, y = rnd() * h;
-      ctx.moveTo(x, y);
-      for (let s = 0; s < 4; s++) { x += (rnd() - 0.5) * w * 0.5; y += (rnd() - 0.5) * h * 0.5; ctx.lineTo(x, y); }
-      ctx.stroke();
+    // A few smooth, gently curved veins read as marble; many short jagged
+    // strokes just looked like scribbled noise at icon size.
+    for (let i = 0; i < 4; i++) {
+      ctx.strokeStyle = `rgba(150,146,138,${0.35 + rnd() * 0.25})`;
+      ctx.lineWidth = 1 + rnd();
+      const x0 = rnd() * w, y0 = -h * 0.1;
+      const x1 = x0 + (rnd() - 0.5) * w * 0.6, y1 = h * 0.5;
+      const x2 = x1 + (rnd() - 0.5) * w * 0.6, y2 = h * 1.1;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(x1, y1, x2, y2); ctx.stroke();
     }
   },
   wood_paneling(ctx, w, h) {
@@ -65,8 +66,8 @@ const PAINTERS = {
   },
   geometric_wallpaper(ctx, w, h) {
     ctx.fillStyle = '#e3d5a8'; ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#a9822f'; ctx.lineWidth = 2;
-    const step = w / 4;
+    ctx.strokeStyle = '#a9822f'; ctx.lineWidth = 1.25;
+    const step = w / 2.5;
     for (let y = -step; y < h + step; y += step) {
       for (let x = -step; x < w + step; x += step) {
         ctx.beginPath();

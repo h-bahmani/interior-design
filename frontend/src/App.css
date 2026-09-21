@@ -179,6 +179,12 @@
   white-space: nowrap;
 }
 
+.header-dropdown-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 6px 10px;
+}
+
 .header-dropdown button {
   background: transparent;
   border: none;

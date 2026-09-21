@@ -5,7 +5,7 @@ import { auth, db } from './firebase';
 import Auth from './components/Auth';
 import BackendSetup from './components/BackendSetup';
 import Upload from './components/Upload';
-import StyleSelector from './components/StyleSelector';
+import StyleSelector, { STYLES } from './components/StyleSelector';
 import FurnishRoom from './components/FurnishRoom';
 import ObjectEditor from './components/ObjectEditor';
 import AddObjectFromPhoto from './components/AddObjectFromPhoto';
@@ -20,11 +20,12 @@ import { downscaleImage } from './utils/downscaleImage';
 import './App.css';
 import './Workflow.css';
 
-const TOOLS = [['style','16 Design Styles'],['furnish','Furnish Rooms'],['object','Object Editing / Deleting'],['addobject','Add Object From Photo'],['recolor','Object Recolor']];
+const TOOLS = [['style',`${STYLES.length} Design Styles`],['furnish','Furnish Rooms'],['object','Object Editing / Deleting'],['addobject','Add Object From Photo'],['recolor','Object Recolor']];
 function AppInner() {
   const toast=useToast();
   const [user,setUser]=useState(null), [authChecked,setAuthChecked]=useState(false);
   const [apiUrl,setApiUrl]=useState(getApiUrl), [setup,setSetup]=useState(false), [connection,setConnection]=useState('checking');
+  const [promptEnhance,setPromptEnhance]=useState(false);
   const [current,setCurrent]=useState(null), [original,setOriginal]=useState(null), [before,setBefore]=useState(null);
   const [history,setHistory]=useState([]), [showHistory,setShowHistory]=useState(false), [showMenu,setShowMenu]=useState(false);
   const menuRef=useRef(null);
@@ -68,7 +69,7 @@ function AppInner() {
     const timeout=setTimeout(()=>controller.abort(),8000);
     setConnection('checking');
     apiRequest(apiUrl,'/capabilities',undefined,{signal:controller.signal}).then(data=>{
-      if(!cancelled)setConnection(data.api_version===2?'connected':'incompatible');
+      if(!cancelled){setConnection(data.api_version===2?'connected':'incompatible');setPromptEnhance(!!data.prompt_enhance);}
     }).catch(()=>{if(!cancelled)setConnection('offline');});
     return ()=>{cancelled=true;clearTimeout(timeout);controller.abort();};
   },[apiUrl,busy]);
@@ -116,19 +117,27 @@ function AppInner() {
     if(data){const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label:'original'};
       setCurrent(next);setOriginal(next);setBefore(null);setHistory([]);invalidate();}
   };
+  // Only customPrompt/prompt go through enhancePrompt() -- extraDetails pairs with a
+  // full style prompt that's often already 63-74 of CLIP's 77-token budget, so there's
+  // rarely room left for an enhanced version of it anyway (translation alone is enough).
+  const enhanceAndToast=async text=>{
+    const out=await enhancePrompt(activeUrl.current,text);
+    if(out && out!==text)toast(`Prompt enhanced: "${out}"`,'info',6000);
+    return out;
+  };
   const apply=async(path,fields,label)=>{
     if(!current)return;
     const translated={...fields};
-    if(translated.customPrompt)translated.customPrompt=await enhancePrompt(activeUrl.current,await translateToEnglish(translated.customPrompt));
-    if(translated.prompt)translated.prompt=await enhancePrompt(activeUrl.current,await translateToEnglish(translated.prompt));
-    if(translated.extraDetails)translated.extraDetails=await enhancePrompt(activeUrl.current,await translateToEnglish(translated.extraDetails));
+    if(translated.customPrompt)translated.customPrompt=await enhanceAndToast(await translateToEnglish(translated.customPrompt));
+    if(translated.prompt)translated.prompt=await enhanceAndToast(await translateToEnglish(translated.prompt));
+    if(translated.extraDetails)translated.extraDetails=await translateToEnglish(translated.extraDetails);
     if(translated.palette?.prompt)translated.palette={...translated.palette,prompt:await translateToEnglish(translated.palette.prompt)};
     const data=await run('Applying your changes…',request=>request(path,{image:current.image,model:genModel,...translated}));
     if(data)commit(data,label);
   };
   const addObject=async(objectImage,prompt)=>{
     if(!current)return;
-    const translatedPrompt=await enhancePrompt(activeUrl.current,await translateToEnglish(prompt));
+    const translatedPrompt=await enhanceAndToast(await translateToEnglish(prompt));
     const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt:translatedPrompt,selection:requestSelection(),model:genModel}));
     if(data)commit(data,'add_object');
   };
@@ -207,6 +216,7 @@ function AppInner() {
           <span className="header-dropdown-user">{user.displayName || user.email}</span>
           <button role="menuitem" disabled={!!busy} onClick={()=>{setSetup(true);setShowMenu(false);}}>Connection: {connection}</button>
           <button role="menuitem" disabled={!!busy || !history.length} onClick={()=>{setShowHistory(v=>!v);setShowMenu(false);}}>History ({history.length})</button>
+          <span className="header-dropdown-status" title="Set up on the backend (Colab/Kaggle Secrets) — nothing to configure here">AI Prompt Enhancer: {promptEnhance?'On':'Off'}</span>
           <button role="menuitem" disabled={!!busy} onClick={()=>signOut(auth)}>Sign Out</button>
         </div>}
       </div>

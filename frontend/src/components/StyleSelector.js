@@ -2,7 +2,7 @@ import { useState } from 'react';
 import ColorPaletteSelector from './ColorPaletteSelector';
 import StyleComparison from './StyleComparison';
 import StyleGallery from './StyleGallery';
-const STYLES = [
+export const STYLES = [
   { id: "minimalist", name: "Minimalist", desc: "Simple forms, clean lines, restrained details", emoji: "◻", color: "#e8e6df" },
   { id: "industrial", name: "Industrial", desc: "Raw concrete, metal, exposed brick", emoji: "⬡", color: "#8a7a6a" },
   { id: "cyberpunk", name: "Cyberpunk", desc: "Futuristic geometry and technical details", emoji: "◈", color: "#4fc3f7" },

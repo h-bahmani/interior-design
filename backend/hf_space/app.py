@@ -903,11 +903,18 @@ def finish(result):
     return result
 
 
+# CLIP (the text encoder every generation call here goes through) hard-truncates at 77
+# tokens, and the fixed wording around a custom prompt already uses 25-75 of those -- an
+# earlier version of this system prompt let the model write full paragraphs, which
+# silently truncated most of the enhancement (and sometimes the user's own specific
+# request, like "leather dining table") before it ever reached the image model. Capped
+# to a short phrase instead.
 _ENHANCE_SYSTEM_PROMPT = (
     "You expand short interior-design prompts into vivid, concrete visual detail "
-    "(materials, colors, lighting, furniture style) for an AI image generator. Keep the "
-    "same scope and intent exactly -- never add a new room, structural changes, or objects "
-    "the user didn't ask for. Reply with ONLY the rewritten prompt: one paragraph, no "
+    "(materials, colors, lighting, furniture style) for an AI image generator, while "
+    "keeping every specific item the user named. Keep the same scope and intent exactly "
+    "-- never add a new room, structural changes, or objects the user didn't ask for. "
+    "Reply with ONLY the rewritten prompt: STRICTLY 15-20 words, one sentence, no "
     "preamble, no quotes."
 )
 
@@ -925,7 +932,7 @@ def enhance_prompt(text):
                     {"role": "system", "content": _ENHANCE_SYSTEM_PROMPT},
                     {"role": "user", "content": text},
                 ],
-                "max_tokens": 220,
+                "max_tokens": 60,  # ~20 words -- see _ENHANCE_SYSTEM_PROMPT comment on the CLIP budget
             },
             timeout=12,
         )
