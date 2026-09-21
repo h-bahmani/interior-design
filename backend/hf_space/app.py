@@ -438,17 +438,21 @@ print("Style prompts ready:", list(STYLE_PROMPTS))
 # so a spatially-confused guess gets treated like a confident one (reported: a "cabinet"
 # region was actually a blob straddling the TV and wall). Below replicates its own
 # upsample-then-argmax but keeps the softmax probabilities, rejecting a connected
-# component whose mean confidence is too low. 0.35 is deliberately modest — ADE20K has
-# 150 classes, so a correct prediction often isn't hugely confident either.
+# component whose mean confidence is too low. Raised from 0.35 after a wildly wrong,
+# low-confidence guess (wood paneling labeled "stairway") still cleared that bar.
 # Detection used to be very slow: logits were upsampled straight to the ORIGINAL photo
 # size (e.g. 4000x3000 from a phone) and softmax/argmax/connectedComponents all ran at
-# that size -- a [150, H, W] tensor for a big photo is gigabytes, and SegFormer's own
-# processor already resizes its input to 512x512 for the actual model call, so none of
-# that extra resolution bought any accuracy, just cost time. Segmentation and everything
-# downstream of it now run on a capped-size copy (max side 768); only the final mask of
+# that size -- a [150, H, W] tensor for a big photo is gigabytes. The MODEL call itself
+# (im, not a resized copy, still goes in below) always cost the same either way --
+# SegFormer's own processor already resizes its input to a fixed 512x512 regardless of
+# what we pass it, so downsampling the image we feed it couldn't have bought any speed
+# there, only risked changing what the model sees. What actually was that slow, and
+# safe to shrink without touching the model's own input, is everything AFTER the model
+# call: upsampling logits, softmax/argmax, and connectedComponents now run on a
+# capped-size copy (max side 1024) instead of the full photo; only the final mask of
 # each accepted region -- not the whole tensor -- gets resized back up to the original
 # photo size, with one cheap per-region resize instead of one giant one.
-def semantic_regions(im, min_confidence=0.35, max_side=1024):
+def semantic_regions(im, min_confidence=0.45, max_side=1024):
     global _semantic_processor, _semantic_model
     if _semantic_model is None:
         from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
@@ -461,14 +465,14 @@ def semantic_regions(im, min_confidence=0.35, max_side=1024):
         _semantic_processor = AutoImageProcessor.from_pretrained(model_id, cache_dir=CACHE_DIR)
         _semantic_model = SegformerForSemanticSegmentation.from_pretrained(model_id, cache_dir=CACHE_DIR).eval()
 
-    scale = min(1.0, max_side / max(im.size))
-    work = im.resize((max(1, round(im.width * scale)), max(1, round(im.height * scale))), Image.Resampling.LANCZOS) if scale < 1 else im
-
-    inputs = _semantic_processor(images=work, return_tensors="pt")
+    inputs = _semantic_processor(images=im, return_tensors="pt")
     with torch.inference_mode():
         output = _semantic_model(**inputs)
+
+    scale = min(1.0, max_side / max(im.size))
+    work_w, work_h = (max(1, round(im.width * scale)), max(1, round(im.height * scale))) if scale < 1 else im.size
     upsampled = torch.nn.functional.interpolate(
-        output.logits, size=(work.height, work.width), mode="bilinear", align_corners=False
+        output.logits, size=(work_h, work_w), mode="bilinear", align_corners=False
     )
     confidence, labels = upsampled.softmax(dim=1)[0].max(dim=0)
     labels = labels.cpu().numpy()
@@ -479,7 +483,7 @@ def semantic_regions(im, min_confidence=0.35, max_side=1024):
     # photo's -- the percentage term is scale-invariant by construction, but the 64px
     # floor is scaled down by scale**2 too, so it still means "64px in the original
     # photo" rather than growing into a much bigger real-world area once downsampled.
-    min_area = max(64 * scale * scale, work.width * work.height * 0.0012)
+    min_area = max(64 * scale * scale, work_w * work_h * 0.0012)
 
     # A mirror shows a reflection of the room, so nearby surfaces (wall, curtain) often
     # get misclassified *inside* the mirror as whatever it's reflecting -- reported: a
