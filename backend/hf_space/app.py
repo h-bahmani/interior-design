@@ -380,6 +380,15 @@ def get_lama_model():
     return _lama_model
 
 
+# Loading it here (once, at startup) instead of lazily on the first delete request --
+# downloading the LaMa checkpoint plus first load can take longer than the reverse
+# proxy in front of this app is willing to wait, which surfaced as a 504 Gateway
+# Timeout on someone's very first "delete object" click.
+print("Loading LaMa (object removal)...")
+get_lama_model()
+print("LaMa loaded")
+
+
 # ============================================================
 # Style prompts — copied from the notebook (already fixed for the CLIP
 # 77-token truncation bug: ROOM_PRESERVE_LEAD/ARTIFACT_NEGATIVE_LEAD go
