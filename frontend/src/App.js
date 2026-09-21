@@ -4,6 +4,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import Auth from './components/Auth';
 import BackendSetup from './components/BackendSetup';
+import PromptEnhancerSetup from './components/PromptEnhancerSetup';
 import Upload from './components/Upload';
 import StyleSelector from './components/StyleSelector';
 import FurnishRoom from './components/FurnishRoom';
@@ -15,6 +16,7 @@ import { ToastProvider, useToast } from './components/Toast';
 import { getApiUrl } from './config';
 import { apiRequest, imageSource } from './services/api';
 import { translateToEnglish } from './utils/translate';
+import { enhancePrompt } from './utils/enhancePrompt';
 import { downscaleImage } from './utils/downscaleImage';
 import './App.css';
 import './Workflow.css';
@@ -24,21 +26,25 @@ function AppInner() {
   const toast=useToast();
   const [user,setUser]=useState(null), [authChecked,setAuthChecked]=useState(false);
   const [apiUrl,setApiUrl]=useState(getApiUrl), [setup,setSetup]=useState(false), [connection,setConnection]=useState('checking');
+  const [showEnhancer,setShowEnhancer]=useState(false);
   const [current,setCurrent]=useState(null), [original,setOriginal]=useState(null), [before,setBefore]=useState(null);
   const [history,setHistory]=useState([]), [showHistory,setShowHistory]=useState(false), [showMenu,setShowMenu]=useState(false);
   const menuRef=useRef(null);
   const [tool,setTool]=useState('style'), [regions,setRegions]=useState([]), [selection,setSelection]=useState(null);
-  const [busy,setBusy]=useState(''), [version,setVersion]=useState(0);
+  const [busy,setBusy]=useState(''), [version,setVersion]=useState(0), [session,setSession]=useState(0);
   const [genModel,setGenModel]=useState(()=>localStorage.getItem('interiorai_gen_model')||'fast');
   const changeModel=m=>{setGenModel(m);localStorage.setItem('interiorai_gen_model',m);};
   const lock=useRef(false), revision=useRef(0), pending=useRef(null), activeUrl=useRef(apiUrl), download=useRef(null), toolPanel=useRef(null);
   // clearRegions=false for in-place edits (commit/undo/restore/history) — keeps
   // the detected region list valid across a chain of edits so you don't have to
-  // re-run detection after every single change.
+  // re-run detection after every single change, and also keeps the current
+  // selection and each tool's own form state (typed prompt, chosen style/
+  // materials/colors) so a generation doesn't wipe out what produced it.
+  // clearRegions=true is reserved for an actual fresh start (new photo, new
+  // login, backend URL change) — that's the only case worth resetting for.
   const invalidate=useCallback((clearRegions=true)=>{
     revision.current+=1; setVersion(revision.current);
-    if(clearRegions)setRegions([]);
-    setSelection(null);
+    if(clearRegions){setRegions([]);setSelection(null);setSession(s=>s+1);}
   },[]);
   const changeUrl=useCallback((url)=>{
     const clean=url.trim().replace(/\/+$/,'');
@@ -115,16 +121,16 @@ function AppInner() {
   const apply=async(path,fields,label)=>{
     if(!current)return;
     const translated={...fields};
-    if(translated.customPrompt)translated.customPrompt=await translateToEnglish(translated.customPrompt);
-    if(translated.prompt)translated.prompt=await translateToEnglish(translated.prompt);
-    if(translated.extraDetails)translated.extraDetails=await translateToEnglish(translated.extraDetails);
+    if(translated.customPrompt)translated.customPrompt=await enhancePrompt(await translateToEnglish(translated.customPrompt));
+    if(translated.prompt)translated.prompt=await enhancePrompt(await translateToEnglish(translated.prompt));
+    if(translated.extraDetails)translated.extraDetails=await enhancePrompt(await translateToEnglish(translated.extraDetails));
     if(translated.palette?.prompt)translated.palette={...translated.palette,prompt:await translateToEnglish(translated.palette.prompt)};
     const data=await run('Applying your changes…',request=>request(path,{image:current.image,model:genModel,...translated}));
     if(data)commit(data,label);
   };
   const addObject=async(objectImage,prompt)=>{
     if(!current)return;
-    const translatedPrompt=await translateToEnglish(prompt);
+    const translatedPrompt=await enhancePrompt(await translateToEnglish(prompt));
     const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt:translatedPrompt,selection:requestSelection(),model:genModel}));
     if(data)commit(data,'add_object');
   };
@@ -187,6 +193,7 @@ function AppInner() {
   if(!user)return <Auth onLogin={()=>{}} />;
   return <div className="app">
     {setup && <BackendSetup onConnect={url=>{changeUrl(url);setSetup(false);}} />}
+    {showEnhancer && <PromptEnhancerSetup onClose={()=>setShowEnhancer(false)} />}
     <div className="ambient-bg" aria-hidden="true"><div className="orb orb-1"/><div className="orb orb-2"/></div>
     <header className="header"><div className="header-inner">
       <button className="logo" disabled={!!busy} onClick={reset}><span className="logo-text">Interior<em>AI</em></span></button>
@@ -203,6 +210,7 @@ function AppInner() {
           <span className="header-dropdown-user">{user.displayName || user.email}</span>
           <button role="menuitem" disabled={!!busy} onClick={()=>{setSetup(true);setShowMenu(false);}}>Connection: {connection}</button>
           <button role="menuitem" disabled={!!busy || !history.length} onClick={()=>{setShowHistory(v=>!v);setShowMenu(false);}}>History ({history.length})</button>
+          <button role="menuitem" disabled={!!busy} onClick={()=>{setShowEnhancer(true);setShowMenu(false);}}>AI Prompt Enhancer</button>
           <button role="menuitem" disabled={!!busy} onClick={()=>signOut(auth)}>Sign Out</button>
         </div>}
       </div>
@@ -232,7 +240,7 @@ function AppInner() {
           <button disabled={!!busy || current===original} onClick={()=>{setBefore(current);setCurrent(original);invalidate(false);}}>Restore original</button></div>
         <nav className="operation-tabs" aria-label="Room tools">{TOOLS.map(([id,label])=><button key={id} disabled={!!busy} aria-pressed={tool===id}
           onClick={()=>{setTool(id);setSelection(null);}}>{label}</button>)}</nav>
-        <div ref={toolPanel} key={`${version}-${tool}`}>
+        <div ref={toolPanel} key={`${session}-${tool}`}>
           {tool==='style' && <><img className="current-room" src={current.image} alt="Current room"/>
             <StyleSelector image={current.image} busy={!!busy} onGenerate={fields=>apply('/generate',fields,fields.style || (fields.colorsOnly ? 'colors_only' : 'custom_style'))}
               onPreview={async(style,palette)=>{
