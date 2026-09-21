@@ -41,5 +41,7 @@ export default function AddObjectFromPhoto({ image, selection, onSelect, busy, o
     <label className="field-label">Where and how should it be placed? (optional)
       <textarea value={prompt} disabled={busy} maxLength={600} onChange={e => setPrompt(e.target.value)} placeholder="Place it next to the window…" /></label>
     <button className="primary-action" disabled={busy || !objectImage || !selection} onClick={() => onAdd(objectImage, prompt.trim(), selection)}>Add this object</button>
+    {!busy && !objectImage && <p className="field-hint">Upload a reference photo above first.</p>}
+    {!busy && objectImage && !selection && <p className="field-hint">Mark where it goes above — a selection made before a style change doesn't carry over, so you may need to draw it again.</p>}
   </section>;
 }

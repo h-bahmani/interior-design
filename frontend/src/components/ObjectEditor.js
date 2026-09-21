@@ -14,5 +14,10 @@ export default function ObjectEditor({ image, regions, selection, onSelect, onDe
     {action==='delete' && <p>The highlighted area will be replaced with an estimated background. Include any shadow you want removed.</p>}
     <button className="primary-action" disabled={busy || !selection || (action==='edit'&&!prompt.trim())}
       onClick={()=>onEdit(action,prompt.trim())}>{action==='edit'?'Apply edit':'Remove and rebuild background'}</button>
+    {/* A disabled button with no explanation reads as "broken" -- especially right after a
+        style change, which clears the selection so a stale mask can't be reused, but leaves
+        no lasting sign of why once its toast fades. */}
+    {!busy && !selection && <p className="field-hint">Select an area above first — detected regions clear after a style change, so you may need to click "Detect objects and surfaces" again.</p>}
+    {!busy && selection && action==='edit' && !prompt.trim() && <p className="field-hint">Describe the change above first.</p>}
   </section>;
 }

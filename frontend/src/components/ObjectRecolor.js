@@ -77,6 +77,16 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
 
   const uploadedTexturePending = useTexture && textureSource==='upload' && !textureImage;
   const canApply = !busy && targets.length && (useColor || useTexture) && !uploadedTexturePending;
+  // A disabled Apply button with no explanation reads as "broken" -- especially right
+  // after a style change, which clears the selection so a stale mask can't be reused
+  // (see commit()/clearRegions in App.js) but leaves no lasting sign of why once its
+  // toast fades. Spelling out the reason here means clicking Apply always either works
+  // or says why not.
+  const blockedReason = busy ? null
+    : !targets.length ? 'Select an area above first (step 1) — detected regions clear after a style change, so you may need to click "Detect objects and surfaces" again.'
+    : !(useColor || useTexture) ? 'Turn on Color and/or Texture / Material above (step 2).'
+    : uploadedTexturePending ? 'Upload a texture image above, or switch to "Generate with AI".'
+    : null;
 
   const applyChanges = () => {
     if (!canApply) return;
@@ -192,5 +202,6 @@ export default function ObjectRecolor({ image, regions, selection, onSelect, onD
     <button className="primary-action" disabled={!canApply} onClick={applyChanges}>
       {targets.length>1 ? `Apply to ${targets.length} areas` : 'Apply changes'}
     </button>
+    {blockedReason && <p className="field-hint">{blockedReason}</p>}
   </section>;
 }
