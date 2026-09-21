@@ -26,6 +26,7 @@ function AppInner() {
   const [user,setUser]=useState(null), [authChecked,setAuthChecked]=useState(false);
   const [apiUrl,setApiUrl]=useState(getApiUrl), [setup,setSetup]=useState(false), [connection,setConnection]=useState('checking');
   const [promptEnhance,setPromptEnhance]=useState(false);
+  const [enhancedPrompt,setEnhancedPrompt]=useState(null);
   const [current,setCurrent]=useState(null), [original,setOriginal]=useState(null), [before,setBefore]=useState(null);
   const [history,setHistory]=useState([]), [showHistory,setShowHistory]=useState(false), [showMenu,setShowMenu]=useState(false);
   const menuRef=useRef(null);
@@ -128,13 +129,19 @@ function AppInner() {
   // Only customPrompt/prompt go through enhancePrompt() -- extraDetails pairs with a
   // full style prompt that's often already 63-74 of CLIP's 77-token budget, so there's
   // rarely room left for an enhanced version of it anyway (translation alone is enough).
+  // The rewritten text used to only show as a toast, which had already faded by the
+  // time a slow generation finished -- enhancedPrompt keeps it on screen (see the
+  // note rendered next to the result below) for as long as it's still the one in effect.
   const enhanceAndToast=async text=>{
     const out=await enhancePrompt(activeUrl.current,text);
-    if(out && out!==text)toast(`Prompt enhanced: "${out}"`,'info',6000);
+    const changed=out && out!==text;
+    setEnhancedPrompt(changed?out:null);
+    if(changed)toast(`Prompt enhanced: "${out}"`,'info',6000);
     return out;
   };
   const apply=async(path,fields,label)=>{
     if(!current)return;
+    setEnhancedPrompt(null);
     const translated={...fields};
     if(translated.customPrompt)translated.customPrompt=await enhanceAndToast(await translateToEnglish(translated.customPrompt));
     if(translated.prompt)translated.prompt=await enhanceAndToast(await translateToEnglish(translated.prompt));
@@ -145,6 +152,7 @@ function AppInner() {
   };
   const addObject=async(objectImage,prompt)=>{
     if(!current)return;
+    setEnhancedPrompt(null);
     const translatedPrompt=await enhanceAndToast(await translateToEnglish(prompt));
     const data=await run('Adding the object…',request=>request('/add-object',{room_image:current.image,object_image:objectImage,prompt:translatedPrompt,selection:requestSelection(),model:genModel}));
     if(data)commit(data,'add_object');
@@ -253,7 +261,7 @@ function AppInner() {
           <button disabled={!!busy || !before} onClick={undo}>Undo last change</button>
           <button disabled={!!busy || current===original} onClick={()=>{setBefore(current);setCurrent(original);invalidate();}}>Restore original</button></div>
         <nav className="operation-tabs" aria-label="Room tools">{TOOLS.map(([id,label])=><button key={id} disabled={!!busy} aria-pressed={tool===id}
-          onClick={()=>{setTool(id);setSelection(null);}}>{label}</button>)}</nav>
+          onClick={()=>{setTool(id);setSelection(null);setEnhancedPrompt(null);}}>{label}</button>)}</nav>
         <div ref={toolPanel} key={`${session}-${tool}`}>
           {tool==='style' && <><img className="current-room" src={current.image} alt="Current room"/>
             <StyleSelector image={current.image} busy={!!busy} onGenerate={fields=>apply('/generate',fields,fields.style || (fields.colorsOnly ? 'colors_only' : 'custom_style'))}
@@ -277,6 +285,11 @@ function AppInner() {
           {tool==='recolor' && <ObjectRecolor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
             onDetect={detect} onPoint={point} onApply={steps=>applySteps(steps,'recolor')}/>}
         </div>
+        {/* Lives outside the tool panel above (which remounts on a style change, wiping
+            that tool's own state) so the rewritten prompt stays visible next to the
+            result it actually produced, instead of vanishing the moment a style
+            generation succeeds. */}
+        {enhancedPrompt && <p className="field-hint enhanced-prompt-note">AI-rewritten prompt sent to the model: "{enhancedPrompt}"</p>}
         {current!==original && <fieldset className="result-fieldset" disabled={!!busy}>
           <ResultView original={original.image} key={version} generated={current.image} style={current.label} onReset={reset}
             onNewStyle={()=>toolPanel.current?.scrollIntoView({behavior:'smooth'})} onUndo={undo} canUndo={!!before} onRegisterDownload={registerDownload}/>
