@@ -796,6 +796,14 @@ TEXTURE_PROMPTS = {
 # material swap that let the model ignore the underlying object's shape entirely and
 # hallucinate an unrelated blob on small/irregular selections. Lower strength keeps
 # the img2img pass anchored to the original structure while still changing the surface.
+# .6 turned out too low, though (reported: an "exposed brick" wall came back as a flat,
+# untextured tint with no visible brick at all -- recolor_object running afterward
+# can't be the cause, since it only shifts LAB a/b color channels and never touches L
+# (lightness), which is what a brick pattern's mortar-line contrast actually lives in;
+# the texture pass itself just wasn't strong enough to register). Raised to .75 as a
+# middle ground -- still well under edit_object's .98, but enough to actually show a
+# assertive pattern instead of a near-identity repaint. Unverified against the real
+# model; if this still comes out flat, it needs to go higher still.
 @spaces.GPU(duration=60)
 def generate_texture(image_b64, selection, texture_name, model="fast", seed=42):
     _, inpaint_pipe = get_pipes(model)
@@ -808,7 +816,7 @@ def generate_texture(image_b64, selection, texture_name, model="fast", seed=42):
              ", seamless repeating texture, realistic material, matching existing lighting and shadows" + QUALITY_SUFFIX)
         neg = (ARTIFACT_NEGATIVE_LEAD + ", changed room style, changed furniture, different material, new object" +
                QUALITY_NEGATIVE + TAIL_NEGATIVE)
-        r = localized_inpaint(im, mask, p, seed, neg, 6, 6, inpaint_pipe, strength=.6)
+        r = localized_inpaint(im, mask, p, seed, neg, 6, 6, inpaint_pipe, strength=.75)
     return {"image": pil_to_base64(r), "mime_type": "image/png"}
 
 
