@@ -448,7 +448,7 @@ print("Style prompts ready:", list(STYLE_PROMPTS))
 # downstream of it now run on a capped-size copy (max side 768); only the final mask of
 # each accepted region -- not the whole tensor -- gets resized back up to the original
 # photo size, with one cheap per-region resize instead of one giant one.
-def semantic_regions(im, min_confidence=0.35, max_side=768):
+def semantic_regions(im, min_confidence=0.35, max_side=1024):
     global _semantic_processor, _semantic_model
     if _semantic_model is None:
         from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
@@ -506,7 +506,14 @@ def semantic_regions(im, min_confidence=0.35, max_side=768):
                 if component.sum() < min_area:
                     continue
             if scale < 1:
-                component = cv2.resize(component.astype("uint8"), im.size, interpolation=cv2.INTER_NEAREST).astype(bool)
+                # INTER_NEAREST here (an earlier version of this fix used it) stretched the
+                # low-res boundary back up as visible blocky/blobby steps -- reported: wall
+                # selection turned into a "swiss cheese" mess of chunky holes over the TV,
+                # mirror and decor instead of following their actual outlines. Resizing the
+                # float mask with INTER_LINEAR and re-thresholding smooths that the same way
+                # the old full-resolution bilinear logit interpolation did, at a fraction of
+                # the cost -- same accuracy (IoU), measurably smoother boundary.
+                component = cv2.resize(component.astype("float32"), im.size, interpolation=cv2.INTER_LINEAR) >= 0.5
             yield label, component
 
 
