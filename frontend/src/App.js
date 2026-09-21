@@ -99,12 +99,20 @@ function AppInner() {
       return null;
     } finally {clearTimeout(timeout);if(pending.current===controller)pending.current=null;lock.current=false;setBusy('');}
   };
-  const commit=(data,label)=>{
+  // clearRegions=true only for a full style change (/generate): that redraws the whole
+  // room via Img2Img, so a previously detected object's exact position/shape can shift
+  // enough that its old mask no longer lands on the same thing -- applying, say, a
+  // material change through a now-stale mask could paint over whatever's actually
+  // there now (reported: "changed the table's material, the table got wiped out").
+  // Targeted edits (recolor, texture, edit/delete one object, furnish, add object)
+  // don't redraw the room, so their masks stay valid and regions keep persisting.
+  const commit=(data,label,clearRegions=false)=>{
     const next={image:imageSource(data.image,data.mime_type),image_id:data.image_id,label};
     setBefore(current);setCurrent(next);
     setHistory(h=>[{...next,id:Date.now()+Math.random()},...h].slice(0,8));
-    invalidate(false);
+    invalidate(clearRegions);
     if(data.warning)toast(data.warning,'info',7000);
+    else if(clearRegions)toast('Style changed — re-run "Detect objects" before editing a specific object again.','info',6000);
     else toast('Changes applied.','success');
   };
   const upload=async file=>{
@@ -133,7 +141,7 @@ function AppInner() {
     if(translated.extraDetails)translated.extraDetails=await translateToEnglish(translated.extraDetails);
     if(translated.palette?.prompt)translated.palette={...translated.palette,prompt:await translateToEnglish(translated.palette.prompt)};
     const data=await run('Applying your changes…',request=>request(path,{image:current.image,model:genModel,...translated}));
-    if(data)commit(data,label);
+    if(data)commit(data,label,path==='/generate');
   };
   const addObject=async(objectImage,prompt)=>{
     if(!current)return;
@@ -243,7 +251,7 @@ function AppInner() {
         <div className="page-header"><h1>Your Room Workspace</h1><p>Every tool uses the current image. Undo restores the previous result.</p></div>
         <div className="tool-actions"><button disabled={!!busy} onClick={reset}>Upload another photo</button>
           <button disabled={!!busy || !before} onClick={undo}>Undo last change</button>
-          <button disabled={!!busy || current===original} onClick={()=>{setBefore(current);setCurrent(original);invalidate(false);}}>Restore original</button></div>
+          <button disabled={!!busy || current===original} onClick={()=>{setBefore(current);setCurrent(original);invalidate();}}>Restore original</button></div>
         <nav className="operation-tabs" aria-label="Room tools">{TOOLS.map(([id,label])=><button key={id} disabled={!!busy} aria-pressed={tool===id}
           onClick={()=>{setTool(id);setSelection(null);}}>{label}</button>)}</nav>
         <div ref={toolPanel} key={`${session}-${tool}`}>
@@ -253,7 +261,7 @@ function AppInner() {
                 const p=palette?.prompt?{...palette,prompt:await translateToEnglish(palette.prompt)}:palette;
                 return run('Generating one style preview…',request=>request('/preview-styles',{image:current.image,styles:[style],palette:p,model:genModel}));
               }}
-              onUsePreview={(image,style)=>{if(!lock.current)commit({image},style);}}
+              onUsePreview={(image,style)=>{if(!lock.current)commit({image},style,true);}}
               onExploreAll={async(palette,styleIds)=>{
                 const p=palette?.prompt?{...palette,prompt:await translateToEnglish(palette.prompt)}:palette;
                 // Scales with how many styles were picked — batching drafts still
