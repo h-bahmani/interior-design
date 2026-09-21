@@ -319,8 +319,21 @@ _cn_xl = ControlNetModel.from_pretrained(
 _vae_xl = AutoencoderKL.from_pretrained(
     "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16, cache_dir=CACHE_DIR
 )
+# "ip-adapter-plus_sdxl_vit-h" is an exception: despite living under sdxl_models, it
+# was trained against the older SD1.5-style ViT-H image encoder (1280-dim), not the
+# ViT-bigG encoder (1664-dim) every other SDXL adapter -- and diffusers' default
+# resolution -- uses. Without this explicit override, load_ip_adapter finds the wrong
+# (1664-dim) encoder under sdxl_models, and the very first real call crashes with
+# "mat1 and mat2 shapes cannot be multiplied (514x1664 and 1280x1280)". Since the
+# adapter always runs (even at scale=0.0), this broke every single Quality-mode
+# generation, not just IP-Adapter-driven ones.
+from transformers import CLIPVisionModelWithProjection
+_ip_adapter_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+    "h94/IP-Adapter", subfolder="models/image_encoder", torch_dtype=torch.float16, cache_dir=CACHE_DIR,
+)
 style_pipe_quality = StableDiffusionXLControlNetImg2ImgPipeline.from_pretrained(
-    SDXL_CHECKPOINT, controlnet=_cn_xl, vae=_vae_xl, torch_dtype=torch.float16, cache_dir=CACHE_DIR,
+    SDXL_CHECKPOINT, controlnet=_cn_xl, vae=_vae_xl, image_encoder=_ip_adapter_image_encoder,
+    torch_dtype=torch.float16, cache_dir=CACHE_DIR,
     variant="fp16", use_safetensors=True,
 ).to("cuda")
 style_pipe_quality.scheduler = UniPCMultistepScheduler.from_config(style_pipe_quality.scheduler.config)
