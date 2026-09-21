@@ -991,8 +991,16 @@ def enhance_prompt(text):
             timeout=12,
         )
         r.raise_for_status()
-        out = r.json()["choices"][0]["message"]["content"].strip()
-        return out or text
+        out = r.json()["choices"][0]["message"]["content"].strip().strip("\"'")
+        # The free model sometimes stops after a couple of words (reported: a prompt
+        # asking for a specific piece of furniture came back enhanced as just "A
+        # plush") -- since the whole point is to ADD detail, anything shorter than
+        # what was typed is a failed generation, not a real enhancement, and silently
+        # replacing a detailed prompt with a fragment would be far worse than just
+        # using the original text untouched.
+        if not out or len(out.split()) < max(6, len(text.split())):
+            return text
+        return out
     except Exception:
         return text
 
