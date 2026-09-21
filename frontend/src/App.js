@@ -260,8 +260,15 @@ function AppInner() {
         <div className="tool-actions"><button disabled={!!busy} onClick={reset}>Upload another photo</button>
           <button disabled={!!busy || !before} onClick={undo}>Undo last change</button>
           <button disabled={!!busy || current===original} onClick={()=>{setBefore(current);setCurrent(original);invalidate();}}>Restore original</button></div>
+        {/* Switching tools used to always clear the selection, even though `regions`
+            itself survives the switch -- so picking an object in Object Editing, then
+            deciding to recolor that SAME object instead, silently lost the pick and
+            made it look like the tool had "forgotten" the object it had just detected.
+            The selection is only actually invalidated by a fresh detect() (new region
+            ids) or a real style regeneration (invalidate(true), which already clears
+            it) -- neither of those is "the user clicked a different tab." */}
         <nav className="operation-tabs" aria-label="Room tools">{TOOLS.map(([id,label])=><button key={id} disabled={!!busy} aria-pressed={tool===id}
-          onClick={()=>{setTool(id);setSelection(null);setEnhancedPrompt(null);}}>{label}</button>)}</nav>
+          onClick={()=>{setTool(id);setEnhancedPrompt(null);}}>{label}</button>)}</nav>
         <div ref={toolPanel} key={`${session}-${tool}`}>
           {tool==='style' && <><img className="current-room" src={current.image} alt="Current room"/>
             <StyleSelector image={current.image} busy={!!busy} onGenerate={fields=>apply('/generate',fields,fields.style || (fields.colorsOnly ? 'colors_only' : 'custom_style'))}
