@@ -338,7 +338,13 @@ function AppInner() {
                 return run('Sketching quick previews…',request=>request('/preview-styles',{image:current.image,styles:styleIds,palette:p,model:genModel,draft:true}),timeoutMs);
               }}/></>}
           {tool==='furnish' && <FurnishRoom image={current.image} busy={!!busy} selection={selection} onSelect={setSelection}
-            onFurnish={prompt=>{const sel=requestSelection();if(sel!==undefined)apply('/furnish-room',{prompt,selection:sel},'furnish');}}/>}
+            onFurnish={(prompt,libraryImage)=>{
+              // libraryImage set = "From Library" mode: place this exact catalog item,
+              // same underlying call as Add Object From Photo, just sourced from our
+              // built-in library instead of a user upload.
+              if(libraryImage)return addObject(libraryImage,prompt);
+              const sel=requestSelection();if(sel!==undefined)apply('/furnish-room',{prompt,selection:sel},'furnish');
+            }}/>}
           {tool==='object' && <ObjectEditor image={current.image} regions={regions} selection={selection} busy={!!busy} onSelect={setSelection}
             onDetect={detect} onPoint={point} onEdit={(action,prompt)=>{const sel=requestSelection();if(sel!==undefined)apply(action==='delete'?'/delete-object':'/edit-object',{selection:sel,prompt},action);}}/>}
           {tool==='addobject' && <AddObjectFromPhoto image={current.image} selection={selection} onSelect={setSelection} busy={!!busy} onAdd={addObject}/>}
