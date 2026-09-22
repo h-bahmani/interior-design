@@ -86,7 +86,7 @@ IMAGE_STORE, REGION_STORE = OrderedDict(), OrderedDict()
 MAX_IMAGES, MAX_REGION_SETS = 16, 8
 
 
-def base64_to_pil(value):
+def _decode_image(value):
     if not isinstance(value, str) or not value:
         raise ValueError("image must be base64")
     try:
@@ -104,7 +104,19 @@ def base64_to_pil(value):
             f"Image is {im.width}x{im.height} ({im.width * im.height / 1_000_000:.1f} megapixels); "
             "max is 16 megapixels — a modern phone photo can exceed this, resize it first"
         )
-    return ImageOps.exif_transpose(im).convert("RGB")
+    return ImageOps.exif_transpose(im)
+
+
+def base64_to_pil(value):
+    return _decode_image(value).convert("RGB")
+
+
+# Only for the object-library cutouts (place_library_object) -- their transparency IS
+# the whole point (it's how we tell "paste this exact cutout" apart from "use this
+# photo as an IP-Adapter reference"), so this is the one caller allowed to keep alpha
+# instead of flattening it away like every other image path in this file does.
+def base64_to_pil_rgba(value):
+    return _decode_image(value).convert("RGBA")
 
 
 def pil_to_base64(im):
@@ -937,6 +949,60 @@ def add_object_from_reference(room_image_b64, object_image_b64, placement_prompt
     return {"image": pil_to_base64(result), "mime_type": "image/png"}
 
 
+def _resize_to_fit(obj, box_w, box_h):
+    box_w, box_h = max(1, box_w), max(1, box_h)
+    obj_ratio, box_ratio = obj.width / obj.height, box_w / box_h
+    if obj_ratio > box_ratio:
+        new_w, new_h = box_w, max(1, round(box_w / obj_ratio))
+    else:
+        new_h, new_w = box_h, max(1, round(box_h * obj_ratio))
+    return obj.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+
+# The object library's whole point is exact cutouts (transparent PNGs) -- pasting the
+# real pixels guarantees the exact item, shape and pose the user picked, which
+# add_object_from_reference's IP-Adapter conditioning above can only approximate.
+# Only the object's own silhouette (dilated a bit, for a contact shadow) gets
+# inpainted afterward, at low strength, purely to harmonize lighting -- unlike a
+# blind rectangular mask at high strength (an earlier version of this idea used
+# exactly that), this can't repaint the pasted object into something else.
+def place_library_object(room_image_b64, object_image_b64, placement_prompt, selection, model="fast", seed=42):
+    _, inpaint_pipe = get_pipes(model)
+    room = base64_to_pil(room_image_b64)
+    obj = base64_to_pil_rgba(object_image_b64)
+
+    footprint = selection_mask(room, selection)
+    ys, xs = np.where(footprint)
+    if not len(xs):
+        raise ValueError("Selection is empty")
+    x1, x2, y1, y2 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+    fitted = _resize_to_fit(obj, x2 - x1, y2 - y1)
+    # Bottom-anchored, horizontally centered in the marked area -- how a person would
+    # actually set a piece of furniture down inside the space they marked.
+    px = x1 + (x2 - x1 - fitted.width) // 2
+    py = y2 - fitted.height
+
+    composited = room.convert("RGBA")
+    composited.alpha_composite(fitted, (px, py))
+    composited = composited.convert("RGB")
+
+    obj_alpha = np.array(fitted.split()[-1])
+    mask = np.zeros((room.height, room.width), dtype=np.uint8)
+    mask[py:py + fitted.height, px:px + fitted.width] = obj_alpha
+    dilate_px = max(8, round(min(room.size) * .015))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * dilate_px + 1, 2 * dilate_px + 1))
+    mask = cv2.dilate(mask, kernel, iterations=1) > 0
+
+    p = ((text_prompt(placement_prompt) if placement_prompt.strip() else "the object rests naturally in the room") +
+         ", realistic contact shadow, matching existing lighting and perspective, photorealistic" + QUALITY_SUFFIX)
+    neg = (ARTIFACT_NEGATIVE_LEAD + ", moved object, different object, changed object shape, extra objects" +
+           QUALITY_NEGATIVE + TAIL_NEGATIVE)
+
+    with MODEL_LOCK:
+        result = localized_inpaint(composited, mask, p, seed, neg, 4, 10, inpaint_pipe, strength=.4)
+    return {"image": pil_to_base64(result), "mime_type": "image/png"}
+
+
 print("Generation functions ready")
 
 # ============================================================
@@ -1208,9 +1274,17 @@ async def add_object_route(request: Request):
     object_image = data.get("object_image")
     if not room_image or not object_image:
         raise ValueError("room_image and object_image required")
+    room_b64 = pil_to_base64(base64_to_pil(room_image))
     with MODEL_LOCK:
-        return finish(add_object_from_reference(pil_to_base64(base64_to_pil(room_image)),
-                                                 pil_to_base64(base64_to_pil(object_image)),
+        # A reference image with real transparency (some pixel isn't fully opaque) is a
+        # pre-cut library cutout, not a casual photo -- paste it exactly instead of only
+        # approximating it via IP-Adapter. A plain photo decodes with alpha=255
+        # everywhere, so this never misfires on an "Add Object From Photo" upload.
+        obj_rgba = base64_to_pil_rgba(object_image)
+        if obj_rgba.getextrema()[-1][0] < 250:
+            return finish(place_library_object(room_b64, pil_to_base64(obj_rgba), data.get("prompt", ""),
+                                                data.get("selection"), request_model(data), request_seed(data)))
+        return finish(add_object_from_reference(room_b64, pil_to_base64(base64_to_pil(object_image)),
                                                  data.get("prompt", ""), data.get("selection"),
                                                  request_model(data), request_seed(data)))
 

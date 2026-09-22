@@ -12,7 +12,7 @@ Upload a room photo, then:
 - Apply one of 16 design styles, or describe your own, or just change the color palette without touching the style
 - Add a specific object from a reference photo (not a text description — the actual item)
 - Edit, delete, or recolor individual detected objects
-- Furnish an empty area with new items
+- Furnish an empty area with new items — describe what to add, or place an exact piece from a built-in ~420-item furniture catalog
 
 The room's structure (walls, windows, doors, layout) stays intact throughout — every generation is grounded in the real photo via ControlNet + Img2Img, not built from scratch.
 
@@ -30,7 +30,7 @@ The room's structure (walls, windows, doors, layout) stays intact throughout —
 | **Object Edit / Delete / Recolor / Texture** | Click-to-select (single or multiple at once) or draw a region; edit with a text prompt, remove cleanly (LaMa), recolor exactly (pixel-level, no model), or apply a material — an uploaded swatch or an AI-generated one (leather, stone, velvet, etc.) |
 | **AI Prompt Enhancer** (optional) | Rewrites a typed prompt into more specific visual detail via a free OpenRouter chat model before generation — server-side key only, nothing to configure per visitor |
 | **Fast / Quality toggle** | SD1.5 (quick) or SDXL (slower, more photorealistic) per generation |
-| **Furnish Room** | Add furniture into a selected area or the room's lower half by default |
+| **Furnish Room** | Two modes: describe what to add (AI generates it), or pick an exact piece from a built-in catalog (~420 pre-cut items across 21 categories, English + Persian search) — the catalog item is pasted exactly, then lighting/shadow blended in |
 | **History, Undo, Restore Original** | Session-local, up to 8 results |
 
 ---
@@ -43,6 +43,7 @@ The teammate's baseline (and a later rewrite they pushed) provided a genuinely g
 - **Photorealism checkpoints** — swapped the vanilla base models for community fine-tunes (Realistic Vision for SD1.5, Juggernaut XL for SDXL)
 - **Fixed the core generation bug** — the pipeline was generating from the Canny edge map alone, never the real photo; switched to Img2Img so the model actually starts from real pixels
 - **Add Object From Photo** — new end-to-end feature (frontend tool + backend IP-Adapter pipeline) that didn't exist before
+- **Furnish-from-catalog** — merged a teammate's separate fork's furniture object library (~420 pre-cut PNGs, 21 categories, English + Persian search aliases) into Furnish Room as a second mode alongside the existing AI-prompt placement. Rebuilt the placement technique rather than importing it as-is: the source version ran a full-rectangle inpaint at strength 0.95 over the pasted object, which risked the model repainting the precisely-placed item into something else; this version masks only the object's own silhouette (dilated for a contact shadow) at a much gentler strength, so the exact pasted pixels survive and only the surrounding lighting/shadow gets blended in. Also didn't bring over the source's standalone inpainting pipeline (it loaded a second, always-resident SDXL model outside this project's single-pipeline-residency scheme, with no EXIF/megapixel/CLIP-budget handling) — the catalog item and library/alias data are new, everything else routes through this project's own already-hardened generation path
 - **Object Recolor** — deterministic OpenCV/LAB color remapping, no generative model, so results are pixel-accurate instead of approximate
 - **LaMa-based object deletion** — replaced repurposed inpainting ("generate nothing here") with a model built specifically for background reconstruction
 - **12 additional design styles** (20 total) with hand-written positive/negative prompts, plus a **fast draft-preview gallery** so browsing many styles doesn't cost a full generation each
@@ -103,10 +104,15 @@ The AI pipeline runs on a free **Google Colab / Kaggle T4 GPU**. The frontend co
 ```
 Ai_interior_Designer_original/
 ├── frontend/
+│   ├── generateObjectLibrary.js          # Regenerates data/objectLibrary.js from public/objects/
+│   ├── public/objects/                   # ~420 pre-cut furniture PNGs, 21 categories
 │   └── src/
 │       ├── App.js                        # State hub, request handling, translation
 │       ├── config.js                     # API URL + connection key resolution
 │       ├── utils/translate.js            # Persian → English prompt translation
+│       ├── data/
+│       │   ├── objectLibrary.js          # Generated: {category: [{name, url}]}
+│       │   └── objectAliases.js          # English + Persian search terms per category
 │       └── components/
 │           ├── StyleSelector.js          # 20 styles, custom prompt, Colors Only mode
 │           ├── StyleGallery.js           # Fast draft-preview gallery
@@ -115,12 +121,13 @@ Ai_interior_Designer_original/
 │           ├── ObjectEditor.js           # Edit / delete selected object
 │           ├── ObjectRecolor.js          # Exact recolor of a selected object
 │           ├── AddObjectFromPhoto.js     # IP-Adapter reference-photo insertion
-│           ├── FurnishRoom.js
+│           ├── FurnishRoom.js            # AI-prompt placement + from-catalog placement
 │           ├── BackendSetup.js           # Connect AI Backend (URL + connection key)
 │           └── ...
 │
 ├── backend/
-│   ├── Original_Interior_Colab_Launch.ipynb   # Run this for AI generation
+│   ├── Original_Interior_Colab_Launch.ipynb   # Run this for AI generation (live app / demo)
+│   ├── Evaluation_Report_Chapter12.ipynb      # Separate, offline: quantitative eval + report charts/Excel
 │   ├── Experimental_Depth_ControlNet_Kaggle.ipynb  # Separate depth-based experiment
 │   ├── app.py                            # Optional local multi-engine proxy (Gemini/OpenAI/Replicate)
 │   └── requirements.txt
