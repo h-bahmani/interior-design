@@ -712,7 +712,11 @@ def delete_object_lama(image_b64, selection):
         radius = int(np.clip(round(object_span * .075), 8, max(12, round(min(im.size) * .06))))
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1))
         expanded = cv2.dilate(cv2.morphologyEx(raw, cv2.MORPH_CLOSE, kernel), kernel, iterations=1)
-        result = get_lama_model()(im, Image.fromarray(expanded, mode="L")).convert("RGB")
+        # SimpleLama pads the input up to a multiple of 8 internally and returns the
+        # output AT THAT PADDED SIZE without cropping back down -- for any image whose
+        # width/height isn't already a multiple of 8 (i.e. most real photos), result.size
+        # != im.size, and Image.composite() below throws "images do not match".
+        result = get_lama_model()(im, Image.fromarray(expanded, mode="L")).convert("RGB").crop((0, 0, im.width, im.height))
         feather = max(2, round(min(im.size) * .006))
         alpha = cv2.GaussianBlur(expanded, (0, 0), feather)
         out = Image.composite(result, im, Image.fromarray(alpha))
