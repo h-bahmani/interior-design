@@ -618,9 +618,9 @@ def generate_style(image_b64, style_name=None, palette=None, custom_prompt=None,
     if colors_only:
         if not palette:
             raise ValueError("colorsOnly requires a palette")
-        p = ROOM_PRESERVE_LEAD + ", only repaint the walls and change decor colors to match this palette"
-        neg = "changed furniture, changed layout, new objects, removed objects" + ROOM_PRESERVE_NEGATIVE
-        strength = 0.4
+        p = ROOM_PRESERVE_LEAD + ", only repaint the walls and change decor colors to match this palette, vivid saturated bold color application"
+        neg = "changed furniture, changed layout, new objects, removed objects, washed out, pale, faded, dull, muted colors" + ROOM_PRESERVE_NEGATIVE
+        strength = 0.55
     elif custom_prompt:
         p = ROOM_PRESERVE_LEAD + ", " + text_prompt(custom_prompt, "customPrompt")
         neg = ARTIFACT_NEGATIVE_LEAD + ROOM_PRESERVE_NEGATIVE
