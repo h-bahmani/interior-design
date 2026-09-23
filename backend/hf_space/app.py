@@ -292,7 +292,7 @@ print("Helper functions ready")
 # ============================================================
 
 GEN_PARAMS = {
-    "fast":    {"guidance_scale": 9.0, "controlnet_conditioning_scale": 1.05},
+    "fast":    {"guidance_scale": 9.0, "controlnet_conditioning_scale": 0.9},
     "quality": {"guidance_scale": 7.0, "controlnet_conditioning_scale": 0.5},
 }
 ADD_OBJECT_PARAMS = {
@@ -612,7 +612,7 @@ def generate_style(image_b64, style_name=None, palette=None, custom_prompt=None,
     style_pipe, _ = get_pipes(model)
     params = GEN_PARAMS.get(model, GEN_PARAMS["fast"])
     strength = 0.7
-    steps = 12 if draft else 40
+    steps = 18 if draft else 40
     canvas_size = 384 if draft else 768
 
     if colors_only:
